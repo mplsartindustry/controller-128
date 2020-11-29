@@ -32,3 +32,9 @@ Internal and external clock
   * 128x grid LED buttons
   * USB 5v power
 
+Other ideas
+
+  * LCD screen
+  * Rotary encoder(s)
+  * Transport buttons
+  * In/out indicator LEDs
