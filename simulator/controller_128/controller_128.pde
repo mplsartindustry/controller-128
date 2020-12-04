@@ -26,6 +26,8 @@ import org.dishevelled.matrix.BitMatrix1D;
 
 import org.dishevelled.processing.executor.Executor;
 
+import themidibus.*;
+
 // size
 static final int W = 16;
 static final int H = 8;
@@ -81,6 +83,7 @@ boolean odd = false;
 static final long INTERNAL_CLOCK_RATE = 10L;
 
 Executor executor;
+MidiBus midi;
 
 void setup()
 {
@@ -88,6 +91,9 @@ void setup()
   //println(SKETCH_WIDTH + " " + SKETCH_HEIGHT);
   size(788, 484);
   executor = new Executor(this, 4);
+
+  MidiBus.list();
+  midi = new MidiBus(this, 0, 0);
 
   // initialize patterns
   for (int i = 0; i < P; i++)
@@ -109,14 +115,14 @@ void setup()
         {
           // calculate delay
           long ms = odd ? oddDelay() : evenDelay();
-     
+
           // rising edge
           try { Thread.currentThread().sleep(ms/2); } catch (InterruptedException e) {}
           button(W - 1, 0, true);
           for (int i = 0; i < P; i++)
           {
             button(PATTERNS[i].peek(), i + 1, true);
-            //if (PATTERNS[i].get()) trigger
+            if (PATTERNS[i].get()) midi.sendNoteOn(0, 32 + i, 127);
           }
 
           // falling edge
