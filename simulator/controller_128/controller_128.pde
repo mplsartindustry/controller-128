@@ -93,7 +93,7 @@ void setup()
   executor = new Executor(this, 4);
 
   MidiBus.list();
-  midi = new MidiBus(this, 0, 0);
+  midi = new MidiBus(this, 0, 1);
 
   // initialize patterns
   for (int i = 0; i < P; i++)
@@ -122,6 +122,7 @@ void setup()
           for (int i = 0; i < P; i++)
           {
             button(PATTERNS[i].peek(), i + 1, true);
+            println("  noteOn (0, " + (32 + i) + ", 127)");
             if (PATTERNS[i].get()) midi.sendNoteOn(0, 32 + i, 127);
           }
 
@@ -253,6 +254,26 @@ void step()
   }
 }
 
+void learn()
+{
+  println("learn");
+  for (int i = 0; i < (P+1); i++) {
+    println("  noteOn (0, " + (32 + i) + ", 127)");
+    midi.sendNoteOn(0, 32 + i, 127);
+    //try { Thread.currentThread().sleep(100); } catch (InterruptedException e) {}
+    //println("  noteOff (0, " + (32 + i) + ", 127)");
+    //midi.sendNoteOff(0, 32 + i, 127);
+    try { Thread.currentThread().sleep(400); } catch (InterruptedException e) {}
+  }
+  println("  done");
+  executor.later("unblinkLearn", 50);
+}
+
+void unblinkLearn()
+{
+  button(2, 0, false);
+}
+
 void reset()
 {
   println("reset");
@@ -302,6 +323,7 @@ void buttonPressed(final int x, final int y)
     switch (x) {
       case 0: play(); break;
       case 1: reset(); break;
+      case 2: learn(); break;
       case (W - 3): clockDown(); break;
       case (W - 2): clockUp(); break;
     }
