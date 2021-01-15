@@ -19,38 +19,147 @@
     along with controller-128.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+
+#include <LiquidCrystal.h>
+#include <Adafruit_NeoTrellis.h>
 #include "colors.h"
 
+// Pin definitions
+// Trellis must use pins 5 and 6 (SCL/INT0, SDA/INT1)
+#define LCD_RS 0
+#define LCD_EN 1
+#define LCD_D4 9
+#define LCD_D5 10
+#define LCD_D6 3
+#define LCD_D7 2
+#define ENCODER_A 21
+#define ENCODER_B 20
+#define ENCODER_S 19
+#define COMMON_INTERRUPT 7    // INT2
+
+Adafruit_NeoTrellis trellis;
+LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+
+int lastTime = millis();
+double unprocessedTime = 0;
+float clocksPerSecond = 2;
+bool clockEdge = false;
+
+// Helpful methods
+uint32_t color(uint8_t r, uint8_t g, uint8_t b) {
+  return trellis.pixels.Color(r, g, b);
+}
+void setPixel(int x, int y, uint32_t color) {
+  trellis.pixels.setPixelColor(x + y * 4, color);
+}
+
+TrellisCallback callback(keyEvent evt) {
+  if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {
+    onButtonPress(evt.bit.NUM % 4, evt.bit.NUM / 4);
+  } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {
+    onButtonRelease(evt.bit.NUM % 4, evt.bit.NUM / 4);
+  }
+  
+  trellis.pixels.show();
+  
+  return 0;
+}
+
+volatile bool lastA, lastB;
+volatile int dir = 0;
+volatile int encoderChange = 0;
+bool lastS;
+
+/*
+ Interrupts are XOR'ed into the common interrupt pin, so we have to check which interrupt it was.
+ 
+ All times an interrupt is triggered:
+   - An encoder rotation signal changes
+*/
+void evaluateInterrupt() {
+  // Check encoder
+  bool currentA = digitalRead(ENCODER_A);
+  bool currentB = digitalRead(ENCODER_B);
+  if (currentA && currentB && (currentA != lastA || currentB != lastB) && ((dir == -1 && lastA && !lastB) || (dir == 1 && !lastA && lastB))) {
+    encoderChange += dir;
+    dir = 0;
+  } else if (currentA && !currentB && lastA && lastB) {
+    dir = 1;
+  } else if (!currentA && currentB && lastA && lastB) {
+    dir = -1;
+  }
+  lastA = currentA;
+  lastB = currentB;
+}
+
 void setup() {
-  rgb c1 = rgb(10, 20, 30);
-  hsv c2 = hsv(0.6d, 0.4d, 0.2d);
+  // Start serial
+  Serial.begin(9600);
 
-  hsv c3 = to_hsv(c1);
-  rgb c4 = to_rgb(c2);
+  // Start LCD
+  lcd.begin(16, 2);
+  lcd.print("Turn encoder or");
+  lcd.setCursor(0, 1);
+  lcd.print("press a button");
 
-  hsv c5;
-  c5 = to_hsv(c1, c5);
-  rgb c6;
-  c6 = to_rgb(c2, c6);
+  // Start trellis
+  if (!trellis.begin()) {
+    Serial.println("Could not start trellis");
+    while(1);
+  } else {
+    Serial.println("NeoPixel Trellis started");
+  }
+  for (int i = 0; i < NEO_TRELLIS_NUM_KEYS; i++) {
+    trellis.activateKey(i, SEESAW_KEYPAD_EDGE_RISING);
+    trellis.activateKey(i, SEESAW_KEYPAD_EDGE_FALLING);
+    trellis.registerCallback(i, callback);
+  }
 
-  int len = 8;
-  rgb colors[] = {
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30),
-    rgb(10, 20, 30)
-  };
+  // Start encoder
+  pinMode(ENCODER_A, INPUT_PULLUP);
+  pinMode(ENCODER_B, INPUT_PULLUP);
+  pinMode(ENCODER_S, INPUT_PULLUP);
+  lastA = digitalRead(ENCODER_A);
+  lastB = digitalRead(ENCODER_B);
+  lastS = digitalRead(ENCODER_S);
 
-  rgb c7 = map_seq(2, 0, 127, colors, len);
-  rgb c8 = map_div(2, -127, 127, colors, len);
-  rgb c9 = map_div(-2, -127, 127, colors, len);
-  rgb c0 = map_qual(2, colors, len);
+  // Start controller
+  init();
+
+  // Attach interrupts
+  pinMode(COMMON_INTERRUPT, INPUT);
+  attachInterrupt(digitalPinToInterrupt(COMMON_INTERRUPT), evaluateInterrupt, CHANGE);
 }
 
 void loop() {
-  // empty
+  trellis.read();
+  
+  if (encoderChange != 0) {
+    onEncoderChange(0, encoderChange);
+    encoderChange = 0;
+  }
+  bool currentS = digitalRead(ENCODER_S);
+  // S is active low (low is pressed)
+  if (!currentS && lastS) {
+    onEncoderPress(0);
+  }
+  if (currentS && !lastS) {
+    onEncoderRelease(0);
+  }
+  lastS = currentS;
+
+  int currentTime = millis();
+  int passedTime = currentTime - lastTime;
+  lastTime = currentTime;
+  unprocessedTime += passedTime / 1000.0;
+  float secondsPerClock = 0.5f / clocksPerSecond;
+  while (unprocessedTime > secondsPerClock) {
+    if (clockEdge) {
+      onClockRising();
+    } else {
+      onClockFalling();
+    }
+    clockEdge = !clockEdge;
+    unprocessedTime -= secondsPerClock;
+  }
 }
