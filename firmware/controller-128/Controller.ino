@@ -35,8 +35,8 @@ void init() {
 }
 
 void updatePixel() {
-  setPixel(cursorPos % 4, cursorPos / 4, currentColor);
-  trellis.pixels.show();
+  setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, currentColor);
+  trellis.show();
 }
 
 void onClockRising() {
@@ -50,9 +50,9 @@ void onClockFalling() {
 }
 
 void onButtonPress(int x, int y) {
-  int i = x + y * 4;
-  if (i < 8) {
-    setPixel(cursorPos % 4, cursorPos / 4, 0);
+  int i = x + y * TRELLIS_WIDTH;
+  if (i < TRELLIS_WIDTH * TRELLIS_HEIGHT) {
+    setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, 0);
     cursorPos = i;
     updatePixel();
   }
@@ -108,10 +108,10 @@ void onEncoderChange(int encoder, int movement) {
   lcd.print("   ");
 
   lastDir = dir;
-  setPixel(cursorPos % 4, cursorPos / 4, 0);
+  setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, 0);
   cursorPos += movement;
-  if (cursorPos < 0) cursorPos += 8;
-  if (cursorPos >= 8) cursorPos -= 8;
+  if (cursorPos < 0) cursorPos += TRELLIS_WIDTH * TRELLIS_HEIGHT;
+  if (cursorPos >= TRELLIS_WIDTH * TRELLIS_HEIGHT) cursorPos -= TRELLIS_WIDTH * TRELLIS_HEIGHT;
   updatePixel();
 }
 
