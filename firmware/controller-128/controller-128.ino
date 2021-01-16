@@ -37,7 +37,14 @@
 #define ENCODER_S 19
 #define COMMON_INTERRUPT 7    // INT2
 
-Adafruit_NeoTrellis trellis;
+#define TRELLIS_WIDTH 16
+#define TRELLIS_HEIGHT 8
+
+Adafruit_NeoTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4] = {
+  {Adafruit_NeoTrellis(0x2E), Adafruit_NeoTrellis(0x2F), Adafruit_NeoTrellis(0x30), Adafruit_NeoTrellis(0x31)},
+  {Adafruit_NeoTrellis(0x32), Adafruit_NeoTrellis(0x33), Adafruit_NeoTrellis(0x34), Adafruit_NeoTrellis(0x35)}
+};
+Adafruit_MultiTrellis trellis((Adafruit_NeoTrellis *)trellisArray, TRELLIS_HEIGHT / 4, TRELLIS_WIDTH / 4);
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
 int lastTime = millis();
@@ -46,21 +53,22 @@ float clocksPerSecond = 2;
 bool clockEdge = false;
 
 // Helpful methods
-uint32_t color(uint8_t r, uint8_t g, uint8_t b) {
-  return trellis.pixels.Color(r, g, b);
+inline uint32_t color(uint8_t r, uint8_t g, uint8_t b) {
+  return seesaw_NeoPixel::Color(r, g, b);
 }
-void setPixel(int x, int y, uint32_t color) {
-  trellis.pixels.setPixelColor(x + y * 4, color);
+inline void setPixel(int x, int y, uint32_t color) {
+  trellis.setPixelColor(x, y, color);
 }
 
+// This is probably wrong
 TrellisCallback callback(keyEvent evt) {
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {
-    onButtonPress(evt.bit.NUM % 4, evt.bit.NUM / 4);
+    onButtonPress(evt.bit.NUM % TRELLIS_WIDTH, evt.bit.NUM / TRELLIS_WIDTH);
   } else if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING) {
-    onButtonRelease(evt.bit.NUM % 4, evt.bit.NUM / 4);
+    onButtonRelease(evt.bit.NUM % TRELLIS_WIDTH, evt.bit.NUM / TRELLIS_WIDTH);
   }
   
-  trellis.pixels.show();
+  trellis.show();
   
   return 0;
 }
@@ -98,21 +106,26 @@ void setup() {
 
   // Start LCD
   lcd.begin(16, 2);
-  lcd.print("Turn encoder or");
-  lcd.setCursor(0, 1);
-  lcd.print("press a button");
+  lcd.print("Starting trelli");
 
   // Start trellis
   if (!trellis.begin()) {
     Serial.println("Could not start trellis");
+    lcd.setCursor(0, 0);
+    lcd.print("Start failed!     ");
     while(1);
   } else {
     Serial.println("NeoPixel Trellis started");
+    lcd.setCursor(0, 0);
+    lcd.print("Started           ");
   }
-  for (int i = 0; i < NEO_TRELLIS_NUM_KEYS; i++) {
-    trellis.activateKey(i, SEESAW_KEYPAD_EDGE_RISING);
-    trellis.activateKey(i, SEESAW_KEYPAD_EDGE_FALLING);
-    trellis.registerCallback(i, callback);
+
+  for (int x = 0; x < TRELLIS_WIDTH; x++) {
+    for (int y = 0; y < TRELLIS_HEIGHT; y++) {
+      trellis.activateKey(x, y, SEESAW_KEYPAD_EDGE_RISING, true);
+      trellis.activateKey(x, y, SEESAW_KEYPAD_EDGE_FALLING, true);
+      trellis.registerCallback(x, y, callback);
+    }
   }
 
   // Start encoder
