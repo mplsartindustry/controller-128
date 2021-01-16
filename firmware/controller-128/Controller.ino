@@ -20,123 +20,189 @@
 
 */
 
-int cursorPos = 0;
+#define STATE_WIDTH TRELLIS_WIDTH*2
+#define STATE_HEIGHT TRELLIS_HEIGHT*2
 
-const uint32_t off = color(0, 0, 30);
-const uint32_t on = color(0, 30, 30);
-uint32_t currentColor = off;
+#define STEPS_PER_BEAT 8
+#define SECONDS_PER_MINUTE 60
+#define BPM_PER_CLOCK_ADJUST 1
 
-int eventCount = 0;
-int lastDir = 0;
-bool cleared = false;
+// Colors
+uint32_t blank = color(0, 0, 0);
+uint32_t active = color(30, 15, 0);
+uint32_t cursor = color(30, 30, 30);
+uint32_t outOfBounds = color(10, 0, 0);
+
+bool displayState[STATE_WIDTH][STATE_HEIGHT];
+
+bool playing = false;
+int cursorX = 0;
+
+int scrollX = 0;
+int scrollY = 0;
+int scrollXLimit = 16;
+int scrollYLimit = 8;
+int patternLength = 15;
+
+// ----- REQUIRED FUNCTIONS -----------------------------
 
 void init() {
-  
-}
-
-void updatePixel() {
-  setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, currentColor);
-  trellis.show();
-}
-
-void onClockRising() {
-  currentColor = on;
-  updatePixel();
-}
-
-void onClockFalling() {
-  currentColor = off;
-  updatePixel();
+  clearDisplay();
+  drawOutOfBounds();
+  updateBPM();
 }
 
 void onButtonPress(int x, int y) {
-  int i = x + y * TRELLIS_WIDTH;
-  if (i < TRELLIS_WIDTH * TRELLIS_HEIGHT) {
-    setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, 0);
-    cursorPos = i;
-    updatePixel();
+  if (y == 0) {
+    switch (x) {
+      case 0: playPause();   break;
+      case 1: resetCursor(); break;
+      case 2: clearState();  break;
+      case 13: clockDown();  break;
+      case 14: clockUp();    break;
+    }
+  } else {
+    if (x + scrollX < patternLength) {
+      bool state = !displayState[x + scrollX][y + scrollY];
+      displayState[x + scrollX][y + scrollY] = state;
+      setPixel(x, y, state ? active : blank);
+    }
   }
-
-  if (!cleared) {
-    lcd.clear();
-    cleared = true;
-  }
-  
-  lcd.setCursor(0, 1);
-  lcd.print("(");
-  lcd.print(x);
-  lcd.print(", ");
-  lcd.print(y);
-  lcd.print(") pressed     ");
 }
 
 void onButtonRelease(int x, int y) {
-  if (!cleared) {
-    lcd.clear();
-    cleared = true;
-  }
   
-  lcd.setCursor(0, 1);
-  lcd.print("(");
-  lcd.print(x);
-  lcd.print(", ");
-  lcd.print(y);
-  lcd.print(") released     ");
+}
+
+void onClockRising() {
+  if (playing) {
+    eraseCursor();
+    cursorX++;
+    if (cursorX >= patternLength) cursorX = 0;
+    drawCursor();
+  }
+
+  // Clock blinky on
+  setPixel(15, 0, active);
+
+  trellis.show();
+}
+
+void onClockFalling() {
+  // Clock blinky off
+  setPixel(15, 0, blank);
+
+  trellis.show();
 }
 
 // -1 is counterclockwise, 1 is clockwise
 void onEncoderChange(int encoder, int movement) {
-  int dir = sign(movement);
-
-  if (dir == lastDir) {
-    eventCount++;
-  } else {
-    eventCount = 1;
-  }
-
-  if (!cleared) {
-    lcd.clear();
-    cleared = true;
-  }
-
-  lcd.setCursor(0, 0);
-  lcd.print(dir == 1 ? "Encoder CW" : "Encoder CCW");
-  if (eventCount > 1) {
-    lcd.print(" x");
-    lcd.print(eventCount);
-  }
-  lcd.print("   ");
-
-  lastDir = dir;
-  setPixel(cursorPos % TRELLIS_WIDTH, cursorPos / TRELLIS_WIDTH, 0);
-  cursorPos += movement;
-  if (cursorPos < 0) cursorPos += TRELLIS_WIDTH * TRELLIS_HEIGHT;
-  if (cursorPos >= TRELLIS_WIDTH * TRELLIS_HEIGHT) cursorPos -= TRELLIS_WIDTH * TRELLIS_HEIGHT;
-  updatePixel();
+  
 }
 
 void onEncoderPress(int encoder) {
-  if (!cleared) {
-    lcd.clear();
-    cleared = true;
-  }
   
-  lcd.setCursor(0, 1);
-  lcd.print("Encoder pressed ");
 }
 
 void onEncoderRelease(int encoder) {
-  if (!cleared) {
-    lcd.clear();
-    cleared = true;
-  }
   
-  lcd.setCursor(0, 1);
-  lcd.print("Encoder released");
 }
 
-inline int sign(int val) {
- if (val < 0) return -1;
- if (val == 0) return 0;
- return 1;
+// ----- END REQUIRED FUNCTIONS -------------------------
+
+// ----- BUTTON FUNCTIONS -------------------------------
+
+void playPause() {
+  if (playing) {
+    playing = false;
+    setPixel(0, 0, blank);
+    eraseCursor();
+    trellis.show();
+  } else {
+    playing = true;
+    cursorX = 0;
+    setPixel(0, 0, active);
+    drawCursor();
+    trellis.show();
+  }
 }
+
+void resetCursor() {
+  if (playing) {
+    eraseCursor();
+    cursorX = 0;
+    drawCursor();
+    trellis.show();
+  }
+}
+
+void clearState() {
+  clearDisplay();
+  drawOutOfBounds();
+  trellis.show();
+}
+
+void clockUp() {
+  clocksPerSecond += (float) STEPS_PER_BEAT / (float) SECONDS_PER_MINUTE * BPM_PER_CLOCK_ADJUST;
+  if (clocksPerSecond > 100) clocksPerSecond = 100; // Seems like a reasonable limit
+  updateBPM();
+}
+
+void clockDown() {
+  clocksPerSecond -= (float) STEPS_PER_BEAT / (float) SECONDS_PER_MINUTE * BPM_PER_CLOCK_ADJUST;
+  if (clocksPerSecond < 0) clocksPerSecond = 0;
+  updateBPM();
+}
+
+// ----- END BUTTON FUNCTIONS ---------------------------
+
+// ----- DISPLAY FUNCTIONS ------------------------------
+
+void clearDisplay() {
+  // Clear state
+  for (int x = 0; x < STATE_WIDTH; x++) {
+    for (int y = 0; y < STATE_HEIGHT; y++) {
+      displayState[x][y] = false;
+    }
+  }
+
+  // Clear display
+  for (int x = 0; x < TRELLIS_WIDTH; x++) {
+    for (int y = 1; y < TRELLIS_HEIGHT; y++) {
+      setPixel(x, y, playing && x == cursorX - scrollX ? cursor : blank);
+    }
+  }
+}
+
+void drawOutOfBounds() {
+  int oobBegin = patternLength - scrollX;
+  for (int x = oobBegin; x < TRELLIS_WIDTH; x++) {
+    for (int y = 1; y < TRELLIS_HEIGHT; y++) {
+      setPixel(x, y, outOfBounds);
+    }
+  }
+}
+
+void eraseCursor() {
+  int x = cursorX - scrollX;
+  for (int y = 1; y < TRELLIS_HEIGHT; y++) {
+    setPixel(x, y, displayState[cursorX][y + scrollY] ? active : blank);
+  }
+}
+
+void drawCursor() {
+  int x = cursorX - scrollX;
+  for (int y = 1; y < TRELLIS_HEIGHT; y++) {
+    setPixel(x, y, displayState[cursorX][y + scrollY] ? active : cursor);
+  }
+}
+
+void updateBPM() {
+  int bpm = (int) (clocksPerSecond * (float) SECONDS_PER_MINUTE / (float) STEPS_PER_BEAT);
+  lcd.setCursor(0, 1);
+  lcd.print(bpm);
+  lcd.print(" bpm, ");
+  lcd.print("__% sw     ");
+}
+
+// ----- END DISPLAY FUNCTIONS --------------------------
