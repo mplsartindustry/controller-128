@@ -47,7 +47,7 @@ Adafruit_NeoTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4] = {
 Adafruit_MultiTrellis trellis((Adafruit_NeoTrellis *)trellisArray, TRELLIS_HEIGHT / 4, TRELLIS_WIDTH / 4);
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 
-int lastTime = millis();
+int lastTime;
 double unprocessedTime = 0;
 float clocksPerSecond = 2;
 bool clockEdge = false;
@@ -60,7 +60,6 @@ inline void setPixel(int x, int y, uint32_t color) {
   trellis.setPixelColor(x, y, color);
 }
 
-// This is probably wrong
 TrellisCallback callback(keyEvent evt) {
   if (evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING) {
     onButtonPress(evt.bit.NUM % TRELLIS_WIDTH, evt.bit.NUM / TRELLIS_WIDTH);
@@ -101,21 +100,16 @@ void evaluateInterrupt() {
 }
 
 void setup() {
-  // Start serial
-  Serial.begin(9600);
-
   // Start LCD
   lcd.begin(16, 2);
-  lcd.print("Starting trelli");
+  lcd.print("Starting...");
 
   // Start trellis
   if (!trellis.begin()) {
-    Serial.println("Could not start trellis");
     lcd.setCursor(0, 0);
     lcd.print("Start failed!     ");
     while(1);
   } else {
-    Serial.println("NeoPixel Trellis started");
     lcd.setCursor(0, 0);
     lcd.print("Started           ");
   }
@@ -142,6 +136,7 @@ void setup() {
   // Attach interrupts
   pinMode(COMMON_INTERRUPT, INPUT);
   attachInterrupt(digitalPinToInterrupt(COMMON_INTERRUPT), evaluateInterrupt, CHANGE);
+  lastTime = millis();
 }
 
 void loop() {
