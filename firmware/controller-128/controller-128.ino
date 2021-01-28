@@ -35,6 +35,9 @@
 #define ENCODER_A 21
 #define ENCODER_B 20
 #define ENCODER_S 19
+#define SHIFT_DATA 18
+#define SHIFT_CLK 16
+#define SHIFT_LATCH 17
 #define COMMON_INTERRUPT 7    // INT2
 
 #define TRELLIS_WIDTH 16
@@ -58,6 +61,12 @@ inline uint32_t color(uint8_t r, uint8_t g, uint8_t b) {
 }
 inline void setPixel(int x, int y, uint32_t color) {
   trellis.setPixelColor(x, y, color);
+}
+void outputTriggers(byte b) {
+  digitalWrite(SHIFT_CLK, LOW);
+  shiftOut(SHIFT_DATA, SHIFT_CLK, MSBFIRST, b);
+  digitalWrite(SHIFT_LATCH, HIGH);
+  digitalWrite(SHIFT_LATCH, LOW);
 }
 
 TrellisCallback callback(keyEvent evt) {
@@ -100,6 +109,20 @@ void evaluateInterrupt() {
 }
 
 void setup() {
+  // Set up shift register
+  pinMode(SHIFT_DATA, OUTPUT);
+  pinMode(SHIFT_CLK, OUTPUT);
+  pinMode(SHIFT_LATCH, OUTPUT);
+  digitalWrite(SHIFT_LATCH, LOW);
+  digitalWrite(SHIFT_CLK, LOW);
+  outputTriggers(0);
+
+  for (byte i = 0; i < 255; i++) {
+    outputTriggers(i);
+    delay(10);
+  }
+  outputTriggers(0);
+  
   // Start LCD
   lcd.begin(16, 2);
   lcd.print("Starting...");

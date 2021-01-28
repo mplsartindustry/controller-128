@@ -21,7 +21,7 @@
 */
 
 #define STATE_WIDTH TRELLIS_WIDTH*2
-#define STATE_HEIGHT TRELLIS_HEIGHT*2
+#define STATE_HEIGHT TRELLIS_HEIGHT
 
 #define STEPS_PER_BEAT 8
 #define SECONDS_PER_MINUTE 60
@@ -41,8 +41,8 @@ int cursorX = 0;
 int scrollX = 0;
 int scrollY = 0;
 int scrollXLimit = 16;
-int scrollYLimit = 8;
-int patternLength = 15;
+int scrollYLimit = 0;
+int patternLength = 16;
 
 // ----- REQUIRED FUNCTIONS -----------------------------
 
@@ -82,6 +82,12 @@ void onClockRising() {
     drawCursor();
   }
 
+  byte triggers = 0;
+  for (int i = 0; i < 8; i++) {
+    triggers |= displayState[cursorX][i] << i;
+  }
+  outputTriggers(triggers);
+
   // Clock blinky on
   setPixel(15, 0, active);
 
@@ -89,6 +95,9 @@ void onClockRising() {
 }
 
 void onClockFalling() {
+  // Clear triggers
+  outputTriggers(0);
+  
   // Clock blinky off
   setPixel(15, 0, blank);
 
@@ -97,11 +106,12 @@ void onClockFalling() {
 
 // -1 is counterclockwise, 1 is clockwise
 void onEncoderChange(int encoder, int movement) {
-  
+  if (movement > 0) clockUp();
+  if (movement < 0) clockDown();
 }
 
 void onEncoderPress(int encoder) {
-  
+  playPause();
 }
 
 void onEncoderRelease(int encoder) {
