@@ -526,16 +526,16 @@ float humanizeDur(float dur) {
 
 long oddDelay() {
   float q = 60000.0/rate;
-  float e = q / 4.0;
-  float s1 = e * (swing/100.0);
+  float s = q / 4.0;
+  float s1 = s * (swing/100.0);
   return (long) humanizeDur(s1);
 }
 
 long evenDelay() {
   float q = 60000.0/rate;
-  float e = q / 4.0;
-  float s1 = e * (swing/100.0);
-  float s2 = e - s1;
+  float s = q / 4.0;
+  float s1 = s * (swing/100.0);
+  float s2 = s - s1;
   return (long) humanizeDur(s2);
 }
 
