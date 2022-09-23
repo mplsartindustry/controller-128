@@ -22,7 +22,6 @@
 
 #include <LiquidCrystal.h>
 #include <Adafruit_NeoTrellis.h>
-#include "colors.h"
 
 // Pin definitions
 // Trellis must use pins 5 and 6 (SCL/INT0, SDA/INT1)
