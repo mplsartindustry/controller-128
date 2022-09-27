@@ -154,12 +154,13 @@ namespace Hardware {
     rightEncoder.init();
   }
 
+  #define INTERRUPT(pin, fn) attachInterrupt(digitalPinToInterrupt(pin), fn, CHANGE)
   inline void initInterrupts() {
     pinMode(RESET, OUTPUT);
     digitalWrite(RESET, LOW);
     
     pinMode(COMMON_INTERRUPT, INPUT);
-    attachInterrupt(digitalPinToInterrupt(COMMON_INTERRUPT), handleInterrupt, CHANGE);
+    INTERRUPT(COMMON_INTERRUPT, handleInterrupt);
   }
 
   inline void initClock() {
@@ -222,9 +223,11 @@ namespace Hardware {
     secondsPerPhase = 30.0 / (double) (bpm * TICKS_PER_BEAT);
   }
 
+  uint64_t prevTime2 = 0;
   void tickClock() {
     trellis.read();
 
+    // Encoders & reset
     while (interruptReadIdx != interruptWriteIdx) {
       uint8_t state = interruptBuffer[interruptReadIdx++];
       if (interruptReadIdx >= INTERRUPT_BUF_SIZE)
@@ -237,6 +240,7 @@ namespace Hardware {
     leftEncoder.callHandlers();
     rightEncoder.callHandlers();
 
+    // Software clock
     uint64_t time = millis();
     uint64_t passedTime = time - prevTime;
     prevTime = time;
