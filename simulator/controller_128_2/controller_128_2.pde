@@ -22,11 +22,11 @@
 
 import java.awt.event.KeyEvent;
 
-import themidibus.*;
+//import themidibus.*;
 
 // Simulates controller_128 hardware
 
-float clocksPerSecond = 10.0f;
+//float clocksPerSecond = 10.0f;
 boolean clockEdge = true;
 float swingFactor = 0;
 boolean evenClock = false;
@@ -34,6 +34,8 @@ boolean evenClock = false;
 final int DISPLAY_WIDTH = 16;
 final int DISPLAY_HEIGHT = 8;
 color[][] display = new color[DISPLAY_WIDTH][DISPLAY_HEIGHT];
+
+final int CLOCK_PER_BEAT = 4;
 
 final int buttonSize = 36;
 
@@ -52,46 +54,74 @@ double unprocessedTime = 0;
 // The software simulator
 Simulator simulator;
 
-MidiBus midi;
+//MidiBus midi;
 
 LCD lcd;
+Encoder leftEncoder, rightEncoder;
+
+boolean softwareClockEnabled;
+int tempoBPM;
+
+final char LEFT_ENC_CCW = 'a';
+final char LEFT_ENC_S = 's';
+final char LEFT_ENC_CW = 'd';
+
+final char RIGHT_ENC_CCW = 'j';
+final char RIGHT_ENC_S = 'k';
+final char RIGHT_ENC_CW = 'l';
 
 void settings() {
   //size(788, 484);
   size(1020, 484);
   
   noSmooth();
+  
+  tempoBPM = 60;
 }
 
 void setup() {
   // list all MIDI ports
-  MidiBus.list();
+  //MidiBus.list();
   
   lcd = new LCD();
+  
+  leftEncoder = new Encoder(725, 200, 75, LEFT_ENC_CCW, LEFT_ENC_S, LEFT_ENC_CW);
+  rightEncoder = new Encoder(875, 200, 75, RIGHT_ENC_CCW, RIGHT_ENC_S, RIGHT_ENC_CW);
 
   // this, MIDI in port, MIDI out port
-  midi = new MidiBus(this, 0, 1);
-  simulator = new RyanSimulator(midi);
+  //midi = new MidiBus(this, 0, 1);
+  simulator = new RyanSimulator2(/*midi*/);
 }
 
 // Using draw() as an update method, the actual rendering is in render()
 void draw() {
-  // Run the clock
-  long currentTime = System.currentTimeMillis();
-  long passedTime = currentTime - lastTime;
-  lastTime = currentTime;
-  unprocessedTime += passedTime / 1000.0;
-  float secondsPerClock = 0.5f / clocksPerSecond;
-  while (unprocessedTime > secondsPerClock + secondsPerClock * (evenClock ? swingFactor : -swingFactor)) {
-    if (clockEdge) {
-      simulator.onClockRising();
-      evenClock = !evenClock;
-    } else {
-      simulator.onClockFalling();
+  if (softwareClockEnabled) {
+    // Run the clock
+    long currentTime = System.currentTimeMillis();
+    long passedTime = currentTime - lastTime;
+    lastTime = currentTime;
+    unprocessedTime += passedTime / 1000.0;
+    float secondsPerClock = 0.5f / (tempoBPM * CLOCK_PER_BEAT / 60f);
+    while (unprocessedTime > secondsPerClock + secondsPerClock * (evenClock ? swingFactor : -swingFactor)) {
+      if (clockEdge) {
+        simulator.onClockRising();
+        evenClock = !evenClock;
+      } else {
+        simulator.onClockFalling();
+      }
+      clockEdge = !clockEdge;
+      unprocessedTime -= secondsPerClock;
     }
-    clockEdge = !clockEdge;
-    unprocessedTime -= secondsPerClock;
+  } else if (!clockEdge) {
+    simulator.onClockFalling();
+    clockEdge = true;
   }
+  
+  if (!softwareClockEnabled) {
+    unprocessedTime = 0;
+    lastTime = System.currentTimeMillis();
+  }
+
   render();
 }
 
@@ -128,34 +158,55 @@ void render() {
   //rect(lcdX, lcdY, 205, 50);
   
   lcd.render(lcdX, lcdY, 196, 44);
+  
+  leftEncoder.draw();
+  rightEncoder.draw();
+}
+
+void keyReleased() {
+  switch (key) {
+    case LEFT_ENC_S: simulator.onEncoderRelease(0); break;
+    case RIGHT_ENC_S: simulator.onEncoderRelease(1); break;
+  }
 }
 
 void keyPressed()
 {
-  switch (keyCode)
-  {
-    case UP:
-      cursorY--;
-      break;
-    case DOWN:
-      cursorY++;
-      break;
-    case LEFT:
-      cursorX--;
-      break;
-    case RIGHT:
-      cursorX++;
-      break;
-    case CONTROL:
-    case KeyEvent.VK_SPACE:
-      simulator.onButtonDown(cursorX, cursorY);
-      simulator.onButtonUp(cursorX, cursorY);
-      break;
-    default:
-      break;
+  if (key != CODED) {
+    switch (key) {
+      case LEFT_ENC_CCW:  simulator.onEncoderChange(0, -1); break;
+      case LEFT_ENC_CW:   simulator.onEncoderChange(0, 1); break;
+      case RIGHT_ENC_CCW: simulator.onEncoderChange(1, -1); break;
+      case RIGHT_ENC_CW:  simulator.onEncoderChange(1, 1); break;
+      case LEFT_ENC_S:    simulator.onEncoderPress(0); break;
+      case RIGHT_ENC_S:   simulator.onEncoderPress(1); break;
+    }
+  } else {
+    switch (keyCode)
+    {
+      case UP:
+        cursorY--;
+        break;
+      case DOWN:
+        cursorY++;
+        break;
+      case LEFT:
+        cursorX--;
+        break;
+      case RIGHT:
+        cursorX++;
+        break;
+      case CONTROL:
+      case KeyEvent.VK_SPACE:
+        simulator.onButtonDown(cursorX, cursorY);
+        simulator.onButtonUp(cursorX, cursorY);
+        break;
+      default:
+        break;
+    }
+    cursorX = constrain(cursorX, 0, DISPLAY_WIDTH - 1);
+    cursorY = constrain(cursorY, 0, DISPLAY_HEIGHT - 1);
   }
-  cursorX = constrain(cursorX, 0, DISPLAY_WIDTH - 1);
-  cursorY = constrain(cursorY, 0, DISPLAY_HEIGHT - 1);
 }
 
 void mouseDragged() {
