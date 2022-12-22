@@ -20,14 +20,25 @@
 
 */
 
+#ifndef controller_h
+#define controller_h
+
+#include <Arduino.h>
 #include "hardware.h"
-#include "controller.h"
 
-void setup() {
-  Hardware::init();
-  Controller::init();
+namespace Controller {
+  void init();
+
+  void onButtonPress(uint8_t x, uint8_t y);
+  void onButtonRelease(uint8_t x, uint8_t y);
+
+  void onClockRising();
+  void onClockFalling();
+  void onReset();
+
+  void onEncoderTurn(Hardware::Encoder encoder, int16_t movement);
+  void onEncoderPress(Hardware::Encoder encoder);
+  void onEncoderRelease(Hardware::Encoder encoder);
 }
 
-void loop() {
-  Hardware::tickClock();
-}
+#endif

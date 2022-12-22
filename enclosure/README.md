@@ -2,13 +2,25 @@
 
 ### Features
 
+  * Clock in
+  * Reset in
+  * Clock out
+  * 7x Trigger out
+  * 128x grid LED buttons
+  * USB-C 5v power
+  * LCD screen
+  * Two rotary encoders
+  * Clock tempo, swing, humanize via encoders
+
+### Considerations
+
 External clock only
 
   * Clock in
   * Reset in
   * 8x Trigger out
   * 128x grid LED buttons
-  * USB 5v power
+  * USB-C 5v power
 
 Internal clock only
 
@@ -18,7 +30,7 @@ Internal clock only
   * Swing potentiometer
   * Humanize potentiometer
   * 128x grid LED buttons
-  * USB 5v power
+  * USB-C 5v power
 
 Internal and external clock
 
@@ -30,7 +42,7 @@ Internal and external clock
   * Swing potentiometer
   * Humanize potentiometer
   * 128x grid LED buttons
-  * USB 5v power
+  * USB-C 5v power
 
 Other ideas
 

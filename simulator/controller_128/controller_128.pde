@@ -1,7 +1,7 @@
 /*
 
     controller-128
-    Copyright (c) 2020-2021 held jointly by the individual authors.
+    Copyright (c) 2020-2022 held jointly by the individual authors.
 
     This file is part of controller-128.
 
@@ -33,7 +33,7 @@ static final int W = 16;
 static final int H = 8;
 
 // button size
-static final int S = 36;
+static final int S = 68;
 
 // sketch size
 static final int SKETCH_WIDTH = W * S + 5*S + 2*W;
@@ -44,7 +44,7 @@ static final boolean STATE[][] = new boolean[W][H];
 
 // patterns
 static final int P = H - 1;
-static final Pattern PATTERNS[] = new Pattern[P];
+static final Pattern2 PATTERNS[] = new Pattern2[P];
 
 // default colors, monome greyscale 128 style
 //final int frame = color(24, 27, 30);
@@ -63,6 +63,9 @@ final int highlight = color(80, 0, 80);
 // cursor
 int cursorX = 0;
 int cursorY = 0;
+
+// focus
+int focus = 0;
 
 // true if running
 boolean running = false;
@@ -89,7 +92,7 @@ void setup()
 {
   //size(SKETCH_WIDTH, SKETCH_HEIGHT);
   //println(SKETCH_WIDTH + " " + SKETCH_HEIGHT);
-  size(788, 484);
+  size(1460, 900);
   executor = new Executor(this, 4);
 
   MidiBus.list();
@@ -98,7 +101,7 @@ void setup()
   // initialize patterns
   for (int i = 0; i < P; i++)
   {
-    PATTERNS[i] = new Pattern(W);
+    PATTERNS[i] = new Pattern2(W);
   }
 
   smooth();
@@ -117,17 +120,17 @@ void setup()
           long ms = odd ? oddDelay() : evenDelay();
 
           // rising edge
-          try { Thread.currentThread().sleep(ms/2); } catch (InterruptedException e) {}
+          sleep(ms/2);
           button(W - 1, 0, true);
           for (int i = 0; i < P; i++)
           {
             button(PATTERNS[i].peek(), i + 1, true);
-            println("  noteOn (0, " + (32 + i) + ", 127)");
+            //println("  noteOn (0, " + (32 + i) + ", 127)");
             if (PATTERNS[i].get()) midi.sendNoteOn(0, 32 + i, 127);
           }
 
           // falling edge
-          try { Thread.currentThread().sleep(ms/2); } catch (InterruptedException e) {}
+          sleep(ms/2);
           button(W - 1, 0, false);
           for (int i = 0; i < P; i++)
           {
@@ -137,7 +140,7 @@ void setup()
 
           odd = !odd;
         }
-        try { Thread.currentThread().sleep(INTERNAL_CLOCK_RATE); } catch (InterruptedException e) {}
+        sleep(INTERNAL_CLOCK_RATE);
       }
     }
   });
@@ -171,6 +174,18 @@ void draw()
   strokeWeight(1);
   roundRect(2.5*S + cursorX * (S + 2), 2.5*S + cursorY * (S + 2), S, S, 2);
 }
+
+void sleep(final long dur)
+{
+  try
+  {
+    Thread.sleep(dur);
+  }
+  catch (InterruptedException e)
+  {
+    // ignore
+  }
+ }
 
 void clear(final boolean state)
 {
@@ -260,10 +275,7 @@ void learn()
   for (int i = 0; i < (P+1); i++) {
     println("  noteOn (0, " + (32 + i) + ", 127)");
     midi.sendNoteOn(0, 32 + i, 127);
-    //try { Thread.currentThread().sleep(100); } catch (InterruptedException e) {}
-    //println("  noteOff (0, " + (32 + i) + ", 127)");
-    //midi.sendNoteOff(0, 32 + i, 127);
-    try { Thread.currentThread().sleep(400); } catch (InterruptedException e) {}
+    sleep(400);
   }
   println("  done");
   executor.later("unblinkLearn", 50);
@@ -316,6 +328,34 @@ void unblinkClockDown()
   button(W - 3, 0, false);
 }
 
+void focus()
+{
+  focus++;
+  if (focus >= H)
+  {
+    focus = 0;
+  }
+  println("focus " + focus);
+  executor.later("unblinkFocus", 50);
+}
+
+void unblinkFocus()
+{
+  button(3, 0, false);
+}
+
+void phase()
+{
+  PATTERNS[focus].phase++;
+  println("phase focus(" + focus + ") " + PATTERNS[focus].phase);
+  executor.later("unblinkPhase", 50);
+}
+
+void unblinkPhase()
+{
+  button(4, 0, false);
+}
+
 void buttonPressed(final int x, final int y)
 {
   if (y == 0)
@@ -324,6 +364,8 @@ void buttonPressed(final int x, final int y)
       case 0: play(); break;
       case 1: reset(); break;
       case 2: learn(); break;
+      case 3: focus(); break;
+      case 4: phase(); break;
       case (W - 3): clockDown(); break;
       case (W - 2): clockUp(); break;
     }
@@ -484,16 +526,16 @@ float humanizeDur(float dur) {
 
 long oddDelay() {
   float q = 60000.0/rate;
-  float e = q / 4.0;
-  float s1 = e * (swing/100.0);
+  float s = q / 4.0;
+  float s1 = s * (swing/100.0);
   return (long) humanizeDur(s1);
 }
 
 long evenDelay() {
   float q = 60000.0/rate;
-  float e = q / 4.0;
-  float s1 = e * (swing/100.0);
-  float s2 = e - s1;
+  float s = q / 4.0;
+  float s1 = s * (swing/100.0);
+  float s2 = s - s1;
   return (long) humanizeDur(s2);
 }
 
@@ -523,4 +565,93 @@ static class Pattern
   public void toggle(final int i0, final int i1) { bits.flip(start + i0 , start + i1); }
   public boolean get(final int index) { return bits.get(start + index); }
   public void clear() { bits.clear(); }
+}
+
+static class Pattern2
+{
+  // view
+  public int start = 0; // starting position, inclusive, index into bits
+  // ...or length?
+  public int end = W; // ending position, exclusive, index into bits
+
+  // state
+  public int current = 0; // current position/step, offset from start
+  public int phase = 0; // current position after reset, offset from start
+  private final BitMatrix1D bits = new BitMatrix1D(1024);
+
+  // ticks per step
+  public int ticks = 0;// number of ticks towards incrementing current
+  public int ticksPerStep = 1; // number of clock ticks to increment current
+
+  public Arp arp = Arp.FORWARD; // arpeggiator mode, what happens on step, and how to wrap
+
+  public Pattern2(final int length)
+  {
+    start = 0;
+    end = length;
+  }
+
+  public void tick()
+  {
+    ticks++;
+    if (ticks >= ticksPerStep)
+    {
+      step();
+    }
+  }
+
+  public void step()
+  {
+    ticks = 0;
+    if (arp == Arp.FORWARD)
+    {
+      current++;
+      if (current >= length())
+      {
+        // wrap to start
+        current = 0;
+      }
+    }
+    else if (arp == Arp.REVERSE)
+    {
+      current--;
+      if (current <= 0)
+      {
+        // wrap to end - 1
+        current = (end - 1);
+      }
+    }
+    // ...
+  }
+
+  public void reset()
+  {
+    ticks = 0;
+    current = phase;
+  }
+
+  public int length() { return end - start; }
+  public int peek() { return current; }
+  public boolean get() { return bits.get(start + current); }
+  public boolean get(final int index) { return bits.get(start + index); }
+  public void set(final int index, final boolean value) { bits.set(start + index, value); }
+  public void set(final int i0, final int i1, final boolean value) { bits.set(start + i0, start + i1, value); }
+  public void toggle(final int index) { bits.flip(start + index); }
+  public void toggle(final int i0, final int i1) { bits.flip(start + i0 , start + i1); }
+  public void clear() { bits.clear(); }
+  public void clearView() { set(start, end, false); }
+}
+
+enum Arp
+{
+  FORWARD,
+  REVERSE,
+  FORWARD_REVERSE,
+  REVERSE_FORWARD,
+  FORWARD_REVERSE_REPEAT_LAST,
+  REVERSE_FORWARD_REPEAT_LAST,
+  RANDOM,
+  RANDOM_FORWARD,
+  RANDOM_REVERSE,
+  RANDOM_WALK
 }
