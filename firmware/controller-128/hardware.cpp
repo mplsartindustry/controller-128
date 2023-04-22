@@ -112,6 +112,7 @@ namespace Hardware {
   EncoderState leftEncoder(Encoder::LEFT, L_ENCODER_A, L_ENCODER_B, L_ENCODER_S);
   EncoderState rightEncoder(Encoder::RIGHT, R_ENCODER_A, R_ENCODER_B, R_ENCODER_S);
 
+  bool softwareClockEnabled;
   uint64_t prevTime;
   double unprocessedTime;
   double secondsPerPhase;
@@ -167,6 +168,7 @@ namespace Hardware {
     prevTime = millis();
     clockEdge = false;
 
+    softwareClockEnabled = true;
     setClockBPM(DEFAULT_BPM);
   }
 
@@ -223,7 +225,14 @@ namespace Hardware {
     secondsPerPhase = 30.0 / (double) (bpm * TICKS_PER_BEAT);
   }
 
-  uint64_t prevTime2 = 0;
+  bool isSoftwareClockEnabled() {
+    return softwareClockEnabled;
+  }
+
+  void setSoftwareClockEnabled(bool enabled) {
+    softwareClockEnabled = enabled;
+  }
+
   void tickClock() {
     trellis.read();
 
@@ -241,18 +250,28 @@ namespace Hardware {
     rightEncoder.callHandlers();
 
     // Software clock
-    uint64_t time = millis();
-    uint64_t passedTime = time - prevTime;
-    prevTime = time;
-    unprocessedTime += passedTime / 1000.0;
-    while (unprocessedTime > secondsPerPhase) {
-      if (clockEdge) {
-        Controller::onClockRising();    
-      } else {
-        Controller::onClockFalling();
+    if (softwareClockEnabled) {
+      uint64_t time = millis();
+      uint64_t passedTime = time - prevTime;
+      prevTime = time;
+      unprocessedTime += passedTime / 1000.0;
+      while (unprocessedTime > secondsPerPhase) {
+        if (clockEdge) {
+          Controller::onClockRising();    
+        } else {
+          Controller::onClockFalling();
+        }
+        clockEdge = !clockEdge;
+        unprocessedTime -= secondsPerPhase;
       }
-      clockEdge = !clockEdge;
-      unprocessedTime -= secondsPerPhase;
+    } else {
+      if (!clockEdge) {
+        Controller::onClockFalling();
+        clockEdge = true;
+      }
+
+      unprocessedTime = 0;
+      prevTime = millis();
     }
   }
 }

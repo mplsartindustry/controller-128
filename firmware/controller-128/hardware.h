@@ -32,7 +32,7 @@
 #define TRELLIS_HEIGHT 8
 
 // Constants for BPM calculation
-#define TICKS_PER_BEAT 8
+#define TICKS_PER_BEAT 4
 #define DEFAULT_BPM 60
 
 // Shorter way to define a color
@@ -59,6 +59,9 @@ namespace Hardware {
   // Interrupt handlers
   TrellisCallback buttonCallback(keyEvent event);
   void handleInterrupt();
+
+  bool isSoftwareClockEnabled();
+  void setSoftwareClockEnabled(bool enabled);
 
   uint16_t getClockBPM();
   void setClockBPM(uint16_t bpm);
