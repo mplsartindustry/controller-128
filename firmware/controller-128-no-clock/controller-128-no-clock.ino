@@ -122,9 +122,14 @@ uint32_t map_seq(int x, int min, int max, uint32_t colors[], int len) {
 // tracks
 //
 
-// todo: use #define or enum or strategy pattern
-const int ARP_FORWARD = 0;
-const int ARP_REVERSE = 1;
+enum Arp : uint8_t {
+  UP = 0,
+  DOWN = 1,
+  UP_DOWN = 2,
+  REPEAT_LAST = 3,
+  RANDOM = 4,
+  RANDOM_WALK = 5
+};
 
 struct Track {
   // starting position
@@ -146,10 +151,13 @@ struct Track {
   int duration = 1;
 
   // arp mode
-  int arp = ARP_FORWARD;
+  int arp = Arp::UP;
+
+  // arp direction
+  int direction = 1;
 
   // bits
-  boolean bits[16]; // todo: extend to available memory
+  boolean bits[32];
 
   void tick() {
     ticks++;
@@ -160,19 +168,82 @@ struct Track {
 
   void step() {
     ticks = 0;
-    if (arp == ARP_FORWARD) {
-      current++;
-      if (current >= length) {
-        current = 0;
-      }
+    int next = 0;
+
+    switch (arp) {
+      case Arp::UP:
+        current++;
+        if (current >= length) {
+          current = start;
+        }
+        break;
+
+      case Arp::DOWN:
+        current--;
+        if (current <= start) {
+          current = length - 1;
+        }
+        break;
+
+      case Arp::UP_DOWN:
+        if (direction > 0) {
+          current++;
+          if (current >= length) {
+            direction = -1;
+            current = length - 1;
+          }
+        }
+        else {
+          current--;
+          if (current <= start) {
+            direction = 1;
+            current = start;
+          }
+        }
+        break;
+
+      case Arp::REPEAT_LAST:
+        if (direction > 0) {
+          current++;
+          if (current > length) {
+            direction = -1;
+            current = length - 1;
+          }
+        }
+        else {
+          current--;
+          if (current < start) {
+            direction = 1;
+            current = start;
+          }
+        }
+        break;
+
+      case Arp::RANDOM:
+        next = random(length);
+        while (next == current) {
+          next = random(length);
+        }
+        current = next;
+        break;
+
+      case Arp::RANDOM_WALK:
+        if (random(2) == 1) {
+          current++;
+          if (current >= length) {
+            current = (length - 1);
+          }
+        }
+        else {
+          current--;
+          if (current <= start) {
+            current = start;
+          }
+        }
+        break;
+
+      default: break;
     }
-    else if (arp == ARP_REVERSE) {
-      current--;
-      if (current <= start) {
-        current = length - 1;
-      }
-    }
-    // todo: add'l arp ...
   }
 
   void reset() {
@@ -239,15 +310,15 @@ Track tracks[7];
 #define CLOCK_BUTTON 0
 #define RESET_BUTTON 1
 #define CLEAR_BUTTON 2
-#define INCREASE_START_BUTTON 3 // or cycle start?
+#define INCREASE_START_BUTTON 3
 #define DECREASE_START_BUTTON 4
-#define INCREASE_PHASE_BUTTON 5
+#define INCREASE_PHASE_BUTTON 5 // cycle phase?
 #define DECREASE_PHASE_BUTTON 6
 #define INCREASE_LENGTH_BUTTON 7
 #define DECREASE_LENGTH_BUTTON 8
-#define INCREASE_DURATION_BUTTON 9
+#define INCREASE_DURATION_BUTTON 9 // rename to divide
 #define DECREASE_DURATION_BUTTON 10
-#define INCREASE_ARP_BUTTON 11
+#define INCREASE_ARP_BUTTON 11 // cycle arp
 #define DECREASE_ARP_BUTTON 12
 #define FOCUS_BUTTON 13
 #define INCREASE_FOCUS_BUTTON 14 // or page right?
@@ -265,6 +336,8 @@ boolean trigger4 = false;
 boolean trigger5 = false;
 boolean trigger6 = false;
 boolean trigger7 = false;
+
+boolean previousClock = false;
 
 void clock_pressed() {
   trellis.setPixelColor(CLOCK_BUTTON, 0, pressed);
@@ -292,6 +365,7 @@ void clock_released() {
       }
     }
   }
+  previousClock = true;
 }
 
 void reset_pressed() {
@@ -738,15 +812,15 @@ void setup() {
 // main loop
 //
 
-boolean previousClock = false;
-
-void set_color(int x, int y, uint32_t c) {
+boolean set_color(int x, int y, uint32_t c) {
   int i = (y-1) * 16 + x;
   uint32_t old = buffer[i];
   if (c != old) {
     buffer[i] = c;
     trellis.setPixelColor(x, y, c);
+    return true;
   }
+  return false;
 }
 
 void loop() {
@@ -800,19 +874,19 @@ void loop() {
 
     for (int x = 0; x < TRELLIS_WIDTH; x++) {
       if (t->highlighted(x)) {
-        set_color(x, y, track_focused ? fhighlighted : highlighted);
+        dirty |= set_color(x, y, track_focused ? fhighlighted : highlighted);
       }
       else if (t->selected(x)) {
-        set_color(x, y, track_focused ? fselected : selected);
+        dirty |= set_color(x, y, track_focused ? fselected : selected);
       }
       else if (t->pressed(x)) {
-        set_color(x, y, track_focused ? fpressed : pressed);
+        dirty |= set_color(x, y, track_focused ? fpressed : pressed);
       }
       else if (t->deselected(x)) {
-        set_color(x, y, track_focused ? fdeselected : deselected);
+        dirty |= set_color(x, y, track_focused ? fdeselected : deselected);
       }
       else {
-        set_color(x, y, off);
+        dirty |= set_color(x, y, off);
       }
     }
   }
