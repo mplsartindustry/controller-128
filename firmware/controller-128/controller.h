@@ -32,6 +32,8 @@ namespace Controller {
   void onButtonPress(uint8_t x, uint8_t y);
   void onButtonRelease(uint8_t x, uint8_t y);
 
+  void tick();
+
   void onClockRising();
   void onClockFalling();
   void onReset();
