@@ -45,11 +45,11 @@
 #define RESET 9
 
 namespace Hardware {
-  Adafruit_NeoTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4] = {
-    {Adafruit_NeoTrellis(0x2E), Adafruit_NeoTrellis(0x2F), Adafruit_NeoTrellis(0x30), Adafruit_NeoTrellis(0x31)},
-    {Adafruit_NeoTrellis(0x32), Adafruit_NeoTrellis(0x33), Adafruit_NeoTrellis(0x34), Adafruit_NeoTrellis(0x35)}
+  FastTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4] = {
+    {FastTrellis(0x2E), FastTrellis(0x2F), FastTrellis(0x30), FastTrellis(0x31)},
+    {FastTrellis(0x32), FastTrellis(0x33), FastTrellis(0x34), FastTrellis(0x35)}
   };
-  Adafruit_MultiTrellis trellis((Adafruit_NeoTrellis *)trellisArray, TRELLIS_HEIGHT / 4, TRELLIS_WIDTH / 4);
+  FastMultiTrellis trellis((FastTrellis *)trellisArray, TRELLIS_HEIGHT / 4, TRELLIS_WIDTH / 4);
 
   LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
   
@@ -118,6 +118,7 @@ namespace Hardware {
   double secondsPerPhase;
   bool clockEdge;
   uint16_t bpm;
+  uint64_t prevRead;
   
   inline void initShiftRegister() {
     pinMode(SHIFT_DATA,  OUTPUT);
@@ -187,6 +188,7 @@ namespace Hardware {
     initEncoders();
     initInterrupts();
     initClock();
+    prevRead = millis();
   }
 
   void outputTriggers(uint8_t out) {
@@ -221,8 +223,16 @@ namespace Hardware {
   }
 
   void setClockBPM(uint16_t newBPM) {
+    if (newBPM < MIN_TEMPO) newBPM = MIN_TEMPO;
+    if (newBPM > MAX_TEMPO) newBPM = MAX_TEMPO;
+
     bpm = newBPM;  
     secondsPerPhase = 30.0 / (double) (bpm * TICKS_PER_BEAT);
+  }
+
+  void setClockInterval(uint64_t intervalMs) {
+    double secPerPhase = intervalMs / 2000.0;
+    setClockBPM((uint16_t) (30.0 / secPerPhase));
   }
 
   bool isSoftwareClockEnabled() {
@@ -234,7 +244,7 @@ namespace Hardware {
   }
 
   void tickClock() {
-    trellis.read();
+    trellis.read(1);
 
     // Encoders & reset
     while (interruptReadIdx != interruptWriteIdx) {
@@ -272,6 +282,51 @@ namespace Hardware {
 
       unprocessedTime = 0;
       prevTime = millis();
+    }
+  }
+
+  void FastMultiTrellis::read(uint8_t count) {
+    for (uint8_t i = 0; i < count; i++) {
+      row++;
+      if (row >= _rows) {
+        row = 0;
+        col++;
+        if (col >= _cols)
+          col = 0;
+      }
+
+      FastTrellis* t = (FastTrellis*) ((_trelli + row * _cols) + col);
+
+      // From Adafruit_MultiTrellis.read()
+      uint8_t count = t->getKeypadCount();
+      delayMicroseconds(500);
+      if (count > 0) {
+        count = count + 2;
+        keyEventRaw e[count];
+        t->readKeypad(e, count);
+        for (int i = 0; i < count; i++) {
+          // call any callbacks associated with the key
+          e[i].bit.NUM = NEO_TRELLIS_SEESAW_KEY(e[i].bit.NUM);
+
+          // Modified here since t->_callbacks is protected
+          TrellisCallbackArray callbacks = t->getCallbacks();
+
+          if (e[i].bit.NUM < NEO_TRELLIS_NUM_KEYS &&
+              callbacks[e[i].bit.NUM] != NULL) {
+            // update the event with the multitrellis number
+            keyEvent evt = {e[i].bit.EDGE, e[i].bit.NUM};
+            int x = NEO_TRELLIS_X(e[i].bit.NUM);
+            int y = NEO_TRELLIS_Y(e[i].bit.NUM);
+
+            x = x + col * NEO_TRELLIS_NUM_COLS;
+            y = y + row * NEO_TRELLIS_NUM_ROWS;
+
+            evt.bit.NUM = y * NEO_TRELLIS_NUM_COLS * _cols + x;
+
+            callbacks[e[i].bit.NUM](evt);
+          }
+        }
+      }
     }
   }
 }

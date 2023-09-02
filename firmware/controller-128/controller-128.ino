@@ -26,8 +26,24 @@
 void setup() {
   Hardware::init();
   Controller::init();
+
+  Serial.begin(9600);
 }
 
 void loop() {
+  // uint64_t start = millis();
   Hardware::tickClock();
+  // uint64_t middle = millis();
+  Controller::tick();
+  // uint64_t end = millis();
+
+  // Hardware::lcd.setCursor(0, 0);
+  // Hardware::lcd.print("HW: ");
+  // Hardware::lcd.print(middle - start);
+  // Hardware::lcd.print("   ");
+
+  // Hardware::lcd.setCursor(0, 1);
+  // Hardware::lcd.print("SW: ");
+  // Hardware::lcd.print(end - middle);
+  // Hardware::lcd.print("   ");
 }

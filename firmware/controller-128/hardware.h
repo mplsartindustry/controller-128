@@ -35,12 +35,34 @@
 #define TICKS_PER_BEAT 4
 #define DEFAULT_BPM 60
 
+#define MIN_TEMPO 2
+#define MAX_TEMPO 250
+
 // Shorter way to define a color
 #define COLOR(r, g, b) seesaw_NeoPixel::Color((r), (g), (b))
 
 namespace Hardware {
-  extern Adafruit_NeoTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4];
-  extern Adafruit_MultiTrellis trellis;
+  typedef TrellisCallback (**TrellisCallbackArray)(keyEvent);
+  class FastTrellis : public Adafruit_NeoTrellis {
+  public:
+    FastTrellis(uint8_t addr): Adafruit_NeoTrellis(addr) {}
+
+    inline TrellisCallbackArray getCallbacks() {
+      return _callbacks;
+    }
+  };
+
+  class FastMultiTrellis : public Adafruit_MultiTrellis {
+  public:
+    FastMultiTrellis(FastTrellis* trellisArray, uint8_t rows, uint8_t cols)
+      : Adafruit_MultiTrellis((Adafruit_NeoTrellis*) trellisArray, rows, cols), row(0), col(0) {};
+
+    void read(uint8_t count);
+  private:
+    uint8_t row, col;
+  };
+  extern FastTrellis trellisArray[TRELLIS_HEIGHT / 4][TRELLIS_WIDTH / 4];
+  extern FastMultiTrellis trellis;
 
   extern LiquidCrystal lcd;
 
@@ -65,6 +87,7 @@ namespace Hardware {
 
   uint16_t getClockBPM();
   void setClockBPM(uint16_t bpm);
+  void setClockInterval(uint64_t interval);
   
   void tickClock();
 }
