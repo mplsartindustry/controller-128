@@ -1,7 +1,7 @@
 /*
 
     controller-128-no-clock
-    Copyright (c) 2020-2023 held jointly by the individual authors.
+    Copyright (c) 2020-2024 held jointly by the individual authors.
 
     This file is part of controller-128.
 
@@ -117,6 +117,7 @@ uint32_t map_seq(int x, int min, int max, uint32_t colors[], int len) {
   return colors[map(x, min, max, 0, len)];
 }
 
+#define SIZE 32
 
 //
 // tracks
@@ -157,7 +158,7 @@ struct Track {
   int direction = 1;
 
   // bits
-  boolean bits[32];
+  boolean bits[SIZE];
 
   void tick() {
     ticks++;
@@ -297,6 +298,79 @@ struct Track {
   boolean deselected(int i) {
     return check(i);
   }
+
+  void increase_start() {
+    start++;
+    if (start >= length) {
+      start = 0;
+    }
+  }
+
+  void decrease_start() {
+    start--;
+    if (start < 0) {
+      start = length - 1;
+    }
+  }
+
+  void increase_phase() {
+    phase++;
+    if (phase >= length) {
+      phase = 0;
+    }
+  }
+
+  void decrease_phase() {
+    phase--;
+    if (phase < 0) {
+      phase = length - 1;
+    }
+  }
+
+  void increase_length() {
+    length++;
+    if (length > SIZE)  {
+      length = SIZE;
+    }
+  }
+
+  void decrease_length() {
+    length--;
+    if (length < 1) {
+      length = 1;
+    }
+    if (start >= length) {
+      start = length - 1;
+    }
+    if (phase >= length) {
+      phase = length - 1;
+    }
+  }
+
+  void increase_duration() {
+    duration++;
+  }
+
+  void decrease_duration() {
+    duration--;
+    if (duration < 0) {
+      duration = 0;
+    }
+  }
+
+  void increase_arp() {
+    arp++;
+    if (arp > 5) {
+      arp = 0;
+    }
+  }
+
+  void decrease_arp() {
+    arp--;
+    if (arp < 0) {
+      arp = 5;
+    }
+  }
 };
 
 Track tracks[7];
@@ -413,15 +487,14 @@ void increase_start_released() {
   trellis.setPixelColor(INCREASE_START_BUTTON, 0, off);
   trellis.show();
 
-  // todo: all these incr/decr need bounds checking
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->start++;
+    t->increase_start();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->start++;
+      t->increase_start();
     }
   }
 }
@@ -437,12 +510,12 @@ void decrease_start_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->start--;
+    t->decrease_start();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->start--;
+      t->decrease_start();
     }
   }
 }
@@ -458,12 +531,12 @@ void increase_phase_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->phase++;
+    t->increase_phase();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->phase++;
+      t->increase_phase();
     }
   }
 }
@@ -479,12 +552,12 @@ void decrease_phase_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->phase--;
+    t->decrease_phase();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->phase--;
+      t->decrease_phase();
     }
   }
 }
@@ -500,12 +573,12 @@ void increase_length_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->length++;
+    t->increase_length();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->length++;
+      t->increase_length();
     }
   }
 }
@@ -521,12 +594,12 @@ void decrease_length_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->length--;
+    t->decrease_length();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->length--;
+      t->decrease_length();
     }
   }
 }
@@ -542,12 +615,12 @@ void increase_duration_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->duration++;
+    t->increase_duration();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->duration++;
+      t->increase_duration();
     }
   }
 }
@@ -563,12 +636,12 @@ void decrease_duration_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->duration--;
+    t->decrease_duration();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->duration--;
+      t->decrease_duration();
     }
   }
 }
@@ -600,6 +673,9 @@ void increase_focus_released() {
   trellis.show();
 
   focus_index++;
+  if (focus_index > 6) {
+    focus_index = 0;
+  }
 }
 
 void decrease_focus_pressed() {
@@ -612,6 +688,9 @@ void decrease_focus_released() {
   trellis.show();
 
   focus_index--;
+  if (focus_index < 0) {
+    focus_index = 6;
+  }
 }
 
 void increase_arp_pressed() {
@@ -625,12 +704,12 @@ void increase_arp_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->arp++;
+    t->increase_arp();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->arp++;
+      t->increase_arp();
     }
   }
 }
@@ -646,12 +725,12 @@ void decrease_arp_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->arp--;
+    t->decrease_arp();
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->arp--;
+      t->decrease_arp();
     }
   }
 }
