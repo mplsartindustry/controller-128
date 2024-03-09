@@ -45,12 +45,17 @@
 #define TEMPO_STEP 2
 #define MAX_TEMPO_TAPS 4
 
+// Millis
+#define POPUP_PERSIST_TIME 1500
+
 namespace Controller {
   struct Pattern {
     uint32_t blankColor, activeColor;
 
     uint8_t state[MAX_PATTERN_LEN];
     uint8_t length = DEFAULT_PATTERN_LEN;
+
+    uint8_t scroll = 0;
 
     Pattern(uint32_t blank, uint32_t active):
         blankColor(blank), activeColor(active) {
@@ -61,6 +66,8 @@ namespace Controller {
   struct SongPattern {
     uint8_t state[MAX_PATTERN_LEN >> 1];
     uint8_t length = DEFAULT_PATTERN_LEN;
+
+    uint8_t scroll = 0;
 
     SongPattern() {
       memset(state, 0, sizeof(state));
@@ -89,6 +96,9 @@ namespace Controller {
   uint64_t tapDurations[MAX_TEMPO_TAPS];
   int8_t tapCount = -1;
 
+  uint8_t currentOutputs = 0x00;
+  uint8_t gateMask = 0x00; // If bit is set, the channel is a gate, otherwise it's a trigger
+
   // --- VIEW ---
   #define MAX_COLUMN_UPDATES_PER_LOOP 2
 
@@ -107,13 +117,22 @@ namespace Controller {
   static const uint32_t CLOCK_MODE_SOFTWARE = COLOR(30, 30, 0);
   static const uint32_t CLOCK_MODE_HARDWARE = COLOR(30, 15, 0);
 
+  static const uint32_t SETTINGS_TRIGGER = COLOR(8, 8, 0);
+  static const uint32_t SETTINGS_GATE = COLOR(0, 8, 0);
+
   Pattern* viewedPattern = nullptr; // If null, song pattern
   uint8_t viewedPatternIdx = 0;
   uint16_t dirtyColumns = 0xFFFF;
-  uint8_t scroll = 0;
   bool rightEncoderPressed = false;
-  #define PIXEL_TO_PATTERN(x) ((x) + scroll)
-  #define PATTERN_TO_PIXEL(x) ((x) - scroll)
+  uint64_t popupTime = 0; // 0 = no popup
+  bool settingsMenuOpen = false;
+
+  #define PIXEL_TO_PATTERN(x) ((x) + getCurrentScroll())
+  #define PATTERN_TO_PIXEL(x) ((x) - getCurrentScroll())
+
+  uint8_t getCurrentScroll() {
+    return viewedPattern ? viewedPattern->scroll : songPattern.scroll;
+  }
 
   void redrawColumn(uint8_t patternX) {
     int8_t pixelX = PATTERN_TO_PIXEL(patternX);
@@ -174,6 +193,13 @@ namespace Controller {
     }
   }
 
+  inline void updateSettingsColumn(uint8_t pixelX) {
+    for (uint8_t y = 1; y < PANEL_HEIGHT; y++) {
+      uint32_t color = gateMask & (1 << y) ? SETTINGS_GATE : SETTINGS_TRIGGER;
+      Hardware::setPixel(pixelX, y, color);
+    }
+  }
+
   inline void updatePixels() {
     if (!dirtyColumns)
       return;
@@ -184,7 +210,9 @@ namespace Controller {
       if (!cond) continue;
       dirtyColumns ^= cond; // Clear this bit
 
-      if (viewedPattern)
+      if (settingsMenuOpen)
+        updateSettingsColumn(x);
+      else if (viewedPattern)
         updatePatternColumn(x);
       else
         updateSongColumn(x);
@@ -258,9 +286,26 @@ namespace Controller {
 
     Hardware::lcd.setCursor(0, 0);
     Hardware::lcd.print("Idle            ");
+
+    Hardware::outputTriggers(0x00); // No outputs
+    currentOutputs = 0x00;
+  }
+
+  // Prevents the current popup from ending, the lcd should be updated after
+  inline void cancelPopup() {
+    popupTime = 0;
+  }
+
+  void beginNewLengthPopup(uint8_t len) {
+    Hardware::lcd.setCursor(0, 1);
+    Hardware::lcd.print("New length: ");
+    Hardware::lcd.print(len);
+    Hardware::lcd.print("   ");
+    popupTime = millis();
   }
 
   void updateTempoLCDInfo() {
+    cancelPopup();
     Hardware::lcd.setCursor(0, 1);
     Hardware::lcd.print("Tempo: ");
     Hardware::lcd.print(Hardware::getClockBPM());
@@ -424,7 +469,7 @@ namespace Controller {
     switch (x) {
       case CLOCK_X:        clockPress(); break;
       case CLOCK_MODE_X:   beginTapTempo(); break;
-      case SETTINGS_X:     break;
+      case SETTINGS_X:     settingsMenuOpen = true; dirtyColumns = 0xFFFF; break;
       case CLEAR_X:        clearCurrent(); break;
       case SONG_X:         switchToSong(); break;
       case DIRECTION_X:    toggleClockDirection(); break;
@@ -442,6 +487,9 @@ namespace Controller {
     if (y == 0) {
       controlRow(x);
       return;
+    } else if (settingsMenuOpen) {
+      gateMask ^= 1 << y;
+      dirtyColumns = 0xFFFF;
     } else if (!viewedPattern) {
       if (patternX < songPattern.length) {
         uint8_t col = patternX >> 1;
@@ -462,6 +510,10 @@ namespace Controller {
 
   void onButtonRelease(uint8_t x, uint8_t y) {
     if (y == 0) {
+      if (x == SETTINGS_X) {
+        settingsMenuOpen = false;
+        dirtyColumns = 0xFFFF;
+      }
       if (x == CLOCK_X && !Hardware::isSoftwareClockEnabled())
         onClockFalling();
       if (x == CLOCK_MODE_X)
@@ -473,6 +525,10 @@ namespace Controller {
 
   void tick() {
     updatePixels();
+
+    if (popupTime && (millis() - popupTime) >= POPUP_PERSIST_TIME) {
+      updateTempoLCDInfo(); // Will also cancel the popup
+    }
   }
 
 
@@ -516,11 +572,12 @@ namespace Controller {
     if (viewedPattern == playingPattern)
       redrawColumn(cursorX);
 
-    Hardware::outputTriggers(playingPattern->state[cursorX]);
+    currentOutputs = playingPattern->state[cursorX];
+    Hardware::outputTriggers(currentOutputs | 1); // Always output trigger on output 1 for clock out
   }
 
   void onClockFalling() {
-    Hardware::outputTriggers(0);
+    Hardware::outputTriggers(currentOutputs & gateMask);
     Hardware::setPixel(0, 0, CLOCK_OFF);
     Hardware::updateTrellis();
   }
@@ -551,15 +608,100 @@ namespace Controller {
   }
 
   void lengthenPattern() {
+    if (viewedPattern) {
+      if (viewedPattern->length < MAX_PATTERN_LEN) {
+        uint8_t col = viewedPattern->length++;
+        redrawColumn(col);
+        beginNewLengthPopup(col + 1);
+      }
+    } else {
+      if (songPattern.length < MAX_PATTERN_LEN) {
+        uint8_t col = songPattern.length++;
+        redrawColumn(col);
+        beginNewLengthPopup(col + 1);
+      }
+    }
+  }
 
+  uint8_t calcMaxScroll(uint8_t patternLen) {
+    return max(patternLen, PANEL_WIDTH) - PANEL_WIDTH;
   }
 
   void shortenPattern() {
+    if (viewedPattern) {
+      if (viewedPattern->length > MIN_PATTERN_LEN) {
+        uint8_t col = --viewedPattern->length;
+        beginNewLengthPopup(col);
 
+        uint8_t maxScroll = calcMaxScroll(col);
+        if (getCurrentScroll() >= maxScroll) {
+          viewedPattern->scroll = maxScroll;
+          dirtyColumns = 0xFFFF;
+        } else {
+          redrawColumn(col);
+        }
+      }
+    } else {
+      if (songPattern.length > MIN_PATTERN_LEN) {
+        uint8_t col = --songPattern.length;
+        beginNewLengthPopup(col);
+
+        uint8_t maxScroll = calcMaxScroll(col);
+        if (getCurrentScroll() >= maxScroll) {
+          songPattern.scroll = maxScroll;
+          dirtyColumns = 0xFFFF;
+        } else {
+          redrawColumn(col);
+        }
+      }
+    }
   }
 
   void doScroll(int16_t amount) {
+    uint8_t scroll = getCurrentScroll();
+    
+    if (amount < 0 && scroll == 0)
+      return;
+    uint8_t len = viewedPattern ? viewedPattern->length : songPattern.length;
+    uint8_t maxScroll = calcMaxScroll(len);
+    if (amount > 0 && scroll == maxScroll)
+      return;
 
+    dirtyColumns = 0xFFFF;
+
+    if (amount < 0 && scroll < -amount)
+      scroll = 0;
+    else
+      scroll += amount;
+    
+    if (scroll > maxScroll)
+      scroll = maxScroll;
+
+    if (viewedPattern)
+      viewedPattern->scroll = scroll;
+    else
+      songPattern.scroll = scroll;
+
+    // if (amount < 0 && scroll == 0)
+    //   return; // Can't scroll past beginning of pattern
+
+    // uint8_t currentLen;
+    // if (viewedPattern)
+    //   currentLen = viewedPattern->length;
+    // else
+    //   currentLen = songPattern.length;
+
+    // uint8_t maxScroll = min(currentLen, PANEL_WIDTH) - PANEL_WIDTH;
+    // if (amount > 0 && scroll == maxScroll)
+    //   return; // Can't scroll past end of pattern
+
+    // // Redraw everything since the view is changing
+    // dirtyColumns = 0xFFFF;
+
+    // // Move the scroll by amount, while limiting to keep pattern on screen
+    // int16_t unclamped = (int16_t) scroll + amount;
+    // uint8_t clamped = (uint8_t) constrain(unclamped, 0, maxScroll);
+    // scroll = clamped;
   }
 
   void onEncoderTurn(Hardware::Encoder encoder, int16_t movement) {
@@ -580,7 +722,7 @@ namespace Controller {
           }
         }        
       } else {
-        doScroll(movement);
+        doScroll(-movement);
       }
     }
   }
