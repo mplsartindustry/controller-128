@@ -117,7 +117,7 @@ uint32_t map_seq(int x, int min, int max, uint32_t colors[], int len) {
   return colors[map(x, min, max, 0, len)];
 }
 
-#define SIZE 32
+#define SIZE 64
 
 //
 // tracks
@@ -158,7 +158,8 @@ struct Track {
   int direction = 1;
 
   // bits
-  boolean bits[SIZE];
+  //boolean bits[SIZE];
+  uint64_t bits;
 
   void tick() {
     ticks++;
@@ -253,15 +254,23 @@ struct Track {
   }
 
   boolean get() {
-    return bits[start + current];
+    //return bits[start + current];
+    return bits & (1 << (start + current));
   }
 
   boolean get(int i) {
-    return bits[start + i];
+    //return bits[start + i];
+    return bits & (1 << (start + i));
   }
 
   void set(int i, boolean v) {
-    bits[start + i] = v;
+    //bits[start + i] = v;
+    uint64_t bit = 1 << (start + i);
+    if (v) {
+      bits |= bit;
+    } else {
+      bits &= ~bit;
+    }
   }
 
   void toggle(int i) {
