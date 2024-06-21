@@ -119,6 +119,7 @@ uint32_t map_seq(int x, int min, int max, uint32_t colors[], int len) {
 
 #define SIZE 64
 
+
 //
 // tracks
 //
@@ -401,6 +402,18 @@ struct Track {
       arp = 5;
     }
   }
+
+  // copy current page to next page, increasing length if necessary
+  void copy(int from, int width, int to) {
+    if (to + width > length) {
+      length = min(to + width, SIZE);
+    }
+    for (int i = 0; i < width; i++) {
+      if ((to + i) < length) {
+        set(to + i, get(from + i));
+      }
+    }
+  }
 };
 
 Track tracks[7];
@@ -433,8 +446,13 @@ Track tracks[7];
 #define INCREASE_DURATION_BUTTON -2
 
 #define FOCUS_BUTTON 11
-#define DECREASE_FOCUS_BUTTON 12
-#define INCREASE_FOCUS_BUTTON 13
+
+// unused
+#define DECREASE_FOCUS_BUTTON -3
+
+#define INCREASE_FOCUS_BUTTON 12
+
+#define COPY_BUTTON = 13;
 
 #define DECREASE_VIEW_PAGE_BUTTON 14
 #define INCREASE_VIEW_PAGE_BUTTON 15
@@ -831,6 +849,26 @@ void decrease_view_page_released() {
   decrease_view_page();
 }
 
+void copy_pressed() {
+  trellis.setPixelColor(COPY_BUTTON, 0, pressed);
+  trellis.show();
+}
+
+void copy_released() {
+  trellis.setPixelColor(COPY_BUTTON, 0, off);
+  trellis.show();
+
+  int from = view_to_local(0);
+  for (int i = 0; i < 7; i++) {
+    Track* t = &tracks[i];
+
+    int width = min(t->length - from, TRELLIS_WIDTH);
+    int to = from + width + 1;
+
+    t->copy(from, width, to);
+  }
+}
+
 void toggle_pressed(int x, int y) {
   Track* t = &tracks[y-1];
 
@@ -928,6 +966,11 @@ TrellisCallback buttonCallback(keyEvent evt) {
   return 0;
 }
 
+
+//
+// frame buffer
+//
+
 // frame buffer of LED colors
 uint32_t buffer[7*16];
 
@@ -999,6 +1042,7 @@ void setup() {
     buffer[i] = off;
   }
 }
+
 
 //
 // main loop
