@@ -158,7 +158,6 @@ struct Track {
   int direction = 1;
 
   // bits
-  //boolean bits[SIZE];
   uint64_t bits;
 
   void tick() {
@@ -254,18 +253,17 @@ struct Track {
   }
 
   boolean get() {
-    //return bits[start + current];
-    return bits & (1 << (start + current));
+    return get(current);
   }
 
   boolean get(int i) {
-    //return bits[start + i];
-    return bits & (1 << (start + i));
+    int bitIdx = start + i;
+    return bits & (1LL << bitIdx);
   }
 
   void set(int i, boolean v) {
-    //bits[start + i] = v;
-    uint64_t bit = 1 << (start + i);
+    int bitIdx = start + i;
+    uint64_t bit = 1LL << bitIdx;
     if (v) {
       bits |= bit;
     } else {
@@ -393,19 +391,31 @@ Track tracks[7];
 #define CLOCK_BUTTON 0
 #define RESET_BUTTON 1
 #define CLEAR_BUTTON 2
-#define INCREASE_START_BUTTON 3
-#define DECREASE_START_BUTTON 4
-#define INCREASE_PHASE_BUTTON 5 // cycle phase?
-#define DECREASE_PHASE_BUTTON 6
-#define INCREASE_LENGTH_BUTTON 7
-#define DECREASE_LENGTH_BUTTON 8
-#define INCREASE_DURATION_BUTTON 9 // rename to divide
-#define DECREASE_DURATION_BUTTON 10
-#define INCREASE_ARP_BUTTON 11 // cycle arp
-#define DECREASE_ARP_BUTTON 12
-#define FOCUS_BUTTON 13
-#define INCREASE_FOCUS_BUTTON 14 // or page right?
-#define DECREASE_FOCUS_BUTTON 15 // or page left
+
+// is broken?
+#define DECREASE_START_BUTTON 3
+#define INCREASE_START_BUTTON 4
+
+#define DECREASE_PHASE_BUTTON 5
+#define INCREASE_PHASE_BUTTON 6
+
+#define DECREASE_LENGTH_BUTTON 7
+#define INCREASE_LENGTH_BUTTON 8
+
+#define DECREASE_ARP_BUTTON 9
+#define INCREASE_ARP_BUTTON 10
+
+// unused
+#define DECREASE_DURATION_BUTTON -1
+#define INCREASE_DURATION_BUTTON -2
+
+#define FOCUS_BUTTON 11
+#define DECREASE_FOCUS_BUTTON 12
+#define INCREASE_FOCUS_BUTTON 13
+
+#define DECREASE_VIEW_PAGE_BUTTON 14
+#define INCREASE_VIEW_PAGE_BUTTON 15
+
 
 // focus
 int focus_index = 0;
@@ -744,22 +754,73 @@ void decrease_arp_released() {
   }
 }
 
+// leftmost view page index
+int view = 0;
+
+void decrease_view_page() {
+  view -= TRELLIS_WIDTH;
+  if (view < 0) {
+    view = 0;
+  }
+}
+
+void increase_view_page() {
+  view += TRELLIS_WIDTH;
+  if (view >= SIZE) {
+    view = SIZE - TRELLIS_WIDTH;
+  }
+}
+
+int view_to_local(int x) {
+  return x + view;
+}
+
+int local_to_view(int x) {
+  return x - view;
+}
+
+void increase_view_page_pressed() {
+  trellis.setPixelColor(INCREASE_VIEW_PAGE_BUTTON, 0, pressed);
+  trellis.show();
+}
+
+void increase_view_page_released() {
+  trellis.setPixelColor(INCREASE_VIEW_PAGE_BUTTON, 0, off);
+  trellis.show();
+
+  increase_view_page();
+}
+
+void decrease_view_page_pressed() {
+  trellis.setPixelColor(DECREASE_VIEW_PAGE_BUTTON, 0, pressed);
+  trellis.show();
+}
+
+void decrease_view_page_released() {
+  trellis.setPixelColor(DECREASE_VIEW_PAGE_BUTTON, 0, off);
+  trellis.show();
+
+  decrease_view_page();
+}
+
 void toggle_pressed(int x, int y) {
   Track* t = &tracks[y-1];
-  t->toggle(x - t->start);
+
+  int lx = view_to_local(x);
+  t->toggle(lx - t->start);
 
   // waiting for loop is too slow
   boolean track_focused = focus_mode && (focus_index == (y - 1));
-  if (t->highlighted(x)) {
+  if (t->highlighted(lx)) {
     set_color(x, y, track_focused ? fhighlighted : highlighted);
   }
-  else if (t->selected(x)) {
+  else if (t->selected(lx)) {
     set_color(x, y, track_focused ? fselected : selected);
   }
-  else if (t->pressed(x)) {
+  else if (t->pressed(lx)) {
     set_color(x, y, track_focused ? fpressed : pressed);
   }
-  else if (t->deselected(x)) {
+  else if (t->deselected(lx)) {
     set_color(x, y, track_focused ? fdeselected : deselected);
   }
   else {
@@ -797,6 +858,8 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_FOCUS_BUTTON: decrease_focus_pressed(); break;
         case INCREASE_ARP_BUTTON: increase_arp_pressed(); break;
         case DECREASE_ARP_BUTTON: decrease_arp_pressed(); break;
+        case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_pressed(); break;
+        case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_pressed(); break;
         default: break;
       }
     }
@@ -825,6 +888,8 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_FOCUS_BUTTON: decrease_focus_released(); break;
         case INCREASE_ARP_BUTTON: increase_arp_released(); break;
         case DECREASE_ARP_BUTTON: decrease_arp_released(); break;
+        case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_released(); break;
+        case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_released(); break;
         default: break;
       }
     }
@@ -835,13 +900,24 @@ TrellisCallback buttonCallback(keyEvent evt) {
   return 0;
 }
 
+// frame buffer of LED colors
+uint32_t buffer[7*16];
+
+boolean set_color(int x, int y, uint32_t c) {
+  int i = (y-1) * 16 + x;
+  uint32_t old = buffer[i];
+  if (c != old) {
+    buffer[i] = c;
+    trellis.setPixelColor(x, y, c);
+    return true;
+  }
+  return false;
+}
+
 
 //
 // setup
 //
-
-// frame buffer of LED colors
-uint32_t buffer[7*16];
 
 void setup() {
 
@@ -900,18 +976,8 @@ void setup() {
 // main loop
 //
 
-boolean set_color(int x, int y, uint32_t c) {
-  int i = (y-1) * 16 + x;
-  uint32_t old = buffer[i];
-  if (c != old) {
-    buffer[i] = c;
-    trellis.setPixelColor(x, y, c);
-    return true;
-  }
-  return false;
-}
-
 void loop() {
+
   // check clock and reset pins
   boolean clock = digitalRead(CLOCK);
   boolean reset = digitalRead(RESET);
@@ -961,16 +1027,17 @@ void loop() {
     boolean track_focused = focus_mode && (focus_index == (y - 1));
 
     for (int x = 0; x < TRELLIS_WIDTH; x++) {
-      if (t->highlighted(x)) {
+      int lx = view_to_local(x);
+      if (t->highlighted(lx)) {
         dirty |= set_color(x, y, track_focused ? fhighlighted : highlighted);
       }
-      else if (t->selected(x)) {
+      else if (t->selected(lx)) {
         dirty |= set_color(x, y, track_focused ? fselected : selected);
       }
-      else if (t->pressed(x)) {
+      else if (t->pressed(lx)) {
         dirty |= set_color(x, y, track_focused ? fpressed : pressed);
       }
-      else if (t->deselected(x)) {
+      else if (t->deselected(lx)) {
         dirty |= set_color(x, y, track_focused ? fdeselected : deselected);
       }
       else {
