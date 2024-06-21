@@ -157,9 +157,10 @@ struct Track {
   // arp direction
   int direction = 1;
 
-  // bits
+  // bit array stored in uint64_t
   uint64_t bits;
 
+  // advance ticks based on clock
   void tick() {
     ticks++;
     if (ticks >= duration) {
@@ -167,6 +168,7 @@ struct Track {
     }
   }
 
+  // advance step based on ticks per step
   void step() {
     ticks = 0;
     int next = 0;
@@ -247,20 +249,24 @@ struct Track {
     }
   }
 
+  // reset ticks, set current to phase
   void reset() {
     ticks = 0;
     current = phase;
   }
 
+  // get bit at current
   boolean get() {
     return get(current);
   }
 
+  // get bit at index i
   boolean get(int i) {
     int bitIdx = start + i;
     return bits & (1LL << bitIdx);
   }
 
+  // set bit at index i to value v
   void set(int i, boolean v) {
     int bitIdx = start + i;
     uint64_t bit = 1LL << bitIdx;
@@ -271,6 +277,7 @@ struct Track {
     }
   }
 
+  // toggle bit at index i
   void toggle(int i) {
     if (get(i)) {
       set(i, false);
@@ -280,32 +287,39 @@ struct Track {
     }
   }
 
+  // set all bits up to length to false
   void clear() {
     for (int i = 0; i < length; i++) {
       set(i, false);
     }
   }
 
+  // check index i is within start and start + length
   boolean check(int i) {
     return (i >= start) && (i < (start + length));
   }
 
+  // true if index i is highlighted
   boolean highlighted(int i) {
     return i == (current + start);
   }
 
+  // true if index i is selected
   boolean selected(int i) {
     return check(i) && get(i);
   }
 
+  // true if index i is pressed
   boolean pressed(int i) {
     return false;    
   }
 
+  // true if index i is deselected
   boolean deselected(int i) {
     return check(i);
   }
 
+  // increase start within length, wrapping to zero
   void increase_start() {
     start++;
     if (start >= length) {
@@ -313,6 +327,7 @@ struct Track {
     }
   }
 
+  // decrease start within length, wrapping to length - 1
   void decrease_start() {
     start--;
     if (start < 0) {
@@ -320,6 +335,7 @@ struct Track {
     }
   }
 
+  // increase phase within length, wrapping to zero
   void increase_phase() {
     phase++;
     if (phase >= length) {
@@ -327,6 +343,7 @@ struct Track {
     }
   }
 
+  // decrease phase within length, wrapping to length - 1
   void decrease_phase() {
     phase--;
     if (phase < 0) {
@@ -334,6 +351,7 @@ struct Track {
     }
   }
 
+  // increase length, up to size
   void increase_length() {
     length++;
     if (length > SIZE)  {
@@ -341,6 +359,7 @@ struct Track {
     }
   }
 
+  // decrease length, down to one
   void decrease_length() {
     length--;
     if (length < 1) {
@@ -354,17 +373,20 @@ struct Track {
     }
   }
 
+  // increase duration, ticks per step
   void increase_duration() {
     duration++;
   }
 
+  // decrease duration, ticks per step, down to one
   void decrease_duration() {
     duration--;
-    if (duration < 0) {
-      duration = 0;
+    if (duration < 1) {
+      duration = 1;
     }
   }
 
+  // increase arp, wrapping to zero
   void increase_arp() {
     arp++;
     if (arp > 5) {
@@ -372,6 +394,7 @@ struct Track {
     }
   }
 
+  // decrease arp, wrapping to five
   void decrease_arp() {
     arp--;
     if (arp < 0) {
@@ -421,6 +444,31 @@ Track tracks[7];
 int focus_index = 0;
 boolean focus_mode = false;
 
+// view page
+int view = 0;
+
+int view_to_local(int x) {
+  return x + view;
+}
+
+int local_to_view(int x) {
+  return x - view;
+}
+
+void decrease_view_page() {
+  view -= TRELLIS_WIDTH;
+  if (view < 0) {
+    view = 0;
+  }
+}
+
+void increase_view_page() {
+  view += TRELLIS_WIDTH;
+  if (view >= SIZE) {
+    view = SIZE - TRELLIS_WIDTH;
+  }
+}
+
 // cache trigger values
 boolean trigger1 = false;
 boolean trigger2 = false;
@@ -431,6 +479,11 @@ boolean trigger6 = false;
 boolean trigger7 = false;
 
 boolean previousClock = false;
+
+
+//
+// button handling
+//
 
 void clock_pressed() {
   trellis.setPixelColor(CLOCK_BUTTON, 0, pressed);
@@ -752,31 +805,6 @@ void decrease_arp_released() {
       t->decrease_arp();
     }
   }
-}
-
-// leftmost view page index
-int view = 0;
-
-void decrease_view_page() {
-  view -= TRELLIS_WIDTH;
-  if (view < 0) {
-    view = 0;
-  }
-}
-
-void increase_view_page() {
-  view += TRELLIS_WIDTH;
-  if (view >= SIZE) {
-    view = SIZE - TRELLIS_WIDTH;
-  }
-}
-
-int view_to_local(int x) {
-  return x + view;
-}
-
-int local_to_view(int x) {
-  return x - view;
 }
 
 void increase_view_page_pressed() {
