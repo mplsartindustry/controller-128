@@ -452,7 +452,7 @@ Track tracks[7];
 
 #define INCREASE_FOCUS_BUTTON 12
 
-#define COPY_BUTTON = 13;
+#define COPY_BUTTON 13
 
 #define DECREASE_VIEW_PAGE_BUTTON 14
 #define INCREASE_VIEW_PAGE_BUTTON 15
@@ -863,7 +863,7 @@ void copy_released() {
     Track* t = &tracks[i];
 
     int width = min(t->length - from, TRELLIS_WIDTH);
-    int to = from + width + 1;
+    int to = from + width;
 
     t->copy(from, width, to);
   }
@@ -926,6 +926,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_ARP_BUTTON: decrease_arp_pressed(); break;
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_pressed(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_pressed(); break;
+        case COPY_BUTTON: copy_pressed(); break;
         default: break;
       }
     }
@@ -956,6 +957,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_ARP_BUTTON: decrease_arp_released(); break;
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_released(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_released(); break;
+        case COPY_BUTTON: copy_released(); break;
         default: break;
       }
     }
