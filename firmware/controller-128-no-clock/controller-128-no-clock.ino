@@ -87,14 +87,21 @@ uint32_t blues[] = {
   rgb(66,146,198),
   rgb(33,113,181),
   rgb(8,81,156),
-  rgb(8,48,107)
+  rgb(8,48,107),
+  rgb(6,36,80),
+  rgb(4,24,53),
+  rgb(2,12,27),
+  rgb(0,2,5),
+  rgb(0,1,2),
+  rgb(0,0,1)
 };
 
 uint32_t highlighted = blues[4];
 uint32_t selected = blues[5];
 uint32_t pressed = blues[6];
 uint32_t deselected = blues[8];
-uint32_t off = rgb(0, 0, 0);
+uint32_t off = blues[14];
+//uint32_t off = rgb(0, 0, 0);
 
 uint32_t bugn[] = {
   rgb(247,252,253),
@@ -1024,7 +1031,7 @@ void setup() {
       if (x > (wave - 1)) {
         trellis.setPixelColor(x - wave, y, off);
       }
-      trellis.setPixelColor(x, y, map_seq(x, 0, TRELLIS_WIDTH, blues, 9));
+      trellis.setPixelColor(x, y, map_seq(x, 0, TRELLIS_WIDTH, blues, 14));
     }
     trellis.show();
     delay(20);
