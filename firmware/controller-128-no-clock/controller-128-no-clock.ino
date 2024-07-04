@@ -138,8 +138,8 @@ enum Arp : uint8_t {
   REPEAT_LAST = 3,
   RANDOM = 4,
   RANDOM_WALK = 5,
-  RANDOM_WALK_MOSTLY_RIGHT = 6,
-  WRAPPING_RANDOM_WALK = 7
+  WRAPPING_RANDOM_WALK = 6,
+  WRAPPING_RANDOM_WALK_MOSTLY_RIGHT = 7
 };
 
 struct Track {
@@ -255,23 +255,23 @@ struct Track {
         }
         break;
 
-      case Arp::RANDOM_WALK_MOSTLY_RIGHT:
-        if (random(100) < 66) {
+      case Arp::WRAPPING_RANDOM_WALK:
+        if (random(2) == 1) {
           current++;
           if (current >= length) {
-            current = (length - 1);
+            current = start;
           }
         }
         else {
           current--;
           if (current <= start) {
-            current = start;
+            current = (length - 1);
           }
         }
         break;
 
-      case Arp::WRAPPING_RANDOM_WALK:
-        if (random(2) == 1) {
+      case Arp::WRAPPING_RANDOM_WALK_MOSTLY_RIGHT:
+        if (random(100) < 60) {
           current++;
           if (current >= length) {
             current = start;
