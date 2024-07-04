@@ -137,7 +137,9 @@ enum Arp : uint8_t {
   UP_DOWN = 2,
   REPEAT_LAST = 3,
   RANDOM = 4,
-  RANDOM_WALK = 5
+  RANDOM_WALK = 5,
+  RANDOM_WALK_MOSTLY_RIGHT = 6,
+  WRAPPING_RANDOM_WALK = 7
 };
 
 struct Track {
@@ -191,17 +193,17 @@ struct Track {
 
       case Arp::DOWN:
         current--;
-        if (current <= start) {
-          current = length - 1;
+        if (current < start) {
+          current = (length - 1);
         }
         break;
 
       case Arp::UP_DOWN:
         if (direction > 0) {
           current++;
-          if (current >= length) {
+          if (current >= (length - 1)) {
             direction = -1;
-            current = length - 1;
+            current = (length - 1);
           }
         }
         else {
@@ -216,9 +218,9 @@ struct Track {
       case Arp::REPEAT_LAST:
         if (direction > 0) {
           current++;
-          if (current > length) {
+          if (current >= length) {
             direction = -1;
-            current = length - 1;
+            current = (length - 1);
           }
         }
         else {
@@ -249,6 +251,36 @@ struct Track {
           current--;
           if (current <= start) {
             current = start;
+          }
+        }
+        break;
+
+      case Arp::RANDOM_WALK_MOSTLY_RIGHT:
+        if (random(100) < 66) {
+          current++;
+          if (current >= length) {
+            current = (length - 1);
+          }
+        }
+        else {
+          current--;
+          if (current <= start) {
+            current = start;
+          }
+        }
+        break;
+
+      case Arp::WRAPPING_RANDOM_WALK:
+        if (random(2) == 1) {
+          current++;
+          if (current >= length) {
+            current = start;
+          }
+        }
+        else {
+          current--;
+          if (current <= start) {
+            current = (length - 1);
           }
         }
         break;
@@ -397,16 +429,16 @@ struct Track {
   // increase arp, wrapping to zero
   void increase_arp() {
     arp++;
-    if (arp > 5) {
+    if (arp > 7) {
       arp = 0;
     }
   }
 
-  // decrease arp, wrapping to five
+  // decrease arp, wrapping to seven
   void decrease_arp() {
     arp--;
     if (arp < 0) {
-      arp = 5;
+      arp = 7;
     }
   }
 
@@ -418,6 +450,30 @@ struct Track {
     for (int i = 0; i < width; i++) {
       if ((to + i) < length) {
         set(to + i, get(from + i));
+      }
+    }
+  }
+
+  void randomize() {
+    int likelihood = 4;
+    for (int i = start; i < length; i++) {
+      if (i == 0) {
+        likelihood = 48;
+      }
+      else if (i % 8 == 0) {
+        likelihood = 64;
+      }
+      else if (i % 4 == 0) {
+        likelihood = 16;
+      }
+      else if (i % 2 == 0) {
+        likelihood = 8;
+      }
+      else {
+        likelihood = 4;
+      }
+      if (random(100) < likelihood) {
+        set(i, true);
       }
     }
   }
@@ -435,29 +491,28 @@ Track tracks[7];
 #define RESET_BUTTON 1
 #define CLEAR_BUTTON 2
 
-// is broken?
-#define DECREASE_START_BUTTON 3
-#define INCREASE_START_BUTTON 4
+// unused
+#define DECREASE_START_BUTTON -1
+#define INCREASE_START_BUTTON -2
 
-#define DECREASE_PHASE_BUTTON 5
-#define INCREASE_PHASE_BUTTON 6
+#define DECREASE_PHASE_BUTTON 3
+#define INCREASE_PHASE_BUTTON 4
 
-#define DECREASE_LENGTH_BUTTON 7
-#define INCREASE_LENGTH_BUTTON 8
+#define DECREASE_LENGTH_BUTTON 5
+#define INCREASE_LENGTH_BUTTON 6
 
-#define DECREASE_ARP_BUTTON 9
-#define INCREASE_ARP_BUTTON 10
+#define DECREASE_ARP_BUTTON 7
+#define INCREASE_ARP_BUTTON 8
 
 // unused
-#define DECREASE_DURATION_BUTTON -1
-#define INCREASE_DURATION_BUTTON -2
+#define DECREASE_DURATION_BUTTON -3
+#define INCREASE_DURATION_BUTTON -4
 
-#define FOCUS_BUTTON 11
+#define FOCUS_BUTTON 9
+#define DECREASE_FOCUS_BUTTON 10
+#define INCREASE_FOCUS_BUTTON 11
 
-// unused
-#define DECREASE_FOCUS_BUTTON -3
-
-#define INCREASE_FOCUS_BUTTON 12
+#define RANDOMIZE_BUTTON 12
 
 #define COPY_BUTTON 13
 
@@ -856,6 +911,27 @@ void decrease_view_page_released() {
   decrease_view_page();
 }
 
+void randomize_pressed() {
+  trellis.setPixelColor(RANDOMIZE_BUTTON, 0, pressed);
+  trellis.show();
+}
+
+void randomize_released() {
+  trellis.setPixelColor(RANDOMIZE_BUTTON, 0, off);
+  trellis.show();
+
+  if (focus_mode) {
+    Track* t = &tracks[focus_index];
+    t->randomize();
+  }
+  else {
+    for (int i = 0; i < 7; i++) {
+      Track* t = &tracks[i];
+      t->randomize();
+    }
+  }
+}
+
 void copy_pressed() {
   trellis.setPixelColor(COPY_BUTTON, 0, pressed);
   trellis.show();
@@ -933,6 +1009,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_ARP_BUTTON: decrease_arp_pressed(); break;
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_pressed(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_pressed(); break;
+        case RANDOMIZE_BUTTON: randomize_pressed(); break;
         case COPY_BUTTON: copy_pressed(); break;
         default: break;
       }
@@ -964,6 +1041,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case DECREASE_ARP_BUTTON: decrease_arp_released(); break;
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_released(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_released(); break;
+        case RANDOMIZE_BUTTON: randomize_released(); break;
         case COPY_BUTTON: copy_released(); break;
         default: break;
       }
