@@ -264,7 +264,7 @@ struct Track {
         }
         else {
           current--;
-          if (current <= start) {
+          if (current < start) {
             current = (length - 1);
           }
         }
@@ -279,7 +279,7 @@ struct Track {
         }
         else {
           current--;
-          if (current <= start) {
+          if (current < start) {
             current = (length - 1);
           }
         }
