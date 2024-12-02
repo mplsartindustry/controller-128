@@ -121,6 +121,13 @@ uint32_t fselected = bugn[5];
 uint32_t fpressed = bugn[6];
 uint32_t fdeselected = bugn[8];
 
+uint32_t view_pages[] = {
+  rgb(255,255,178),
+  rgb(254,204,92),
+  rgb(253,141,60),
+  rgb(240,59,32)
+};
+
 uint32_t map_seq(int x, int min, int max, uint32_t colors[], int len) {
   return colors[map(x, min, max, 0, len)];
 }
@@ -536,6 +543,10 @@ int local_to_view(int x) {
   return x - view;
 }
 
+int view_page() {
+  return (int) (view / TRELLIS_WIDTH);
+}
+
 void decrease_view_page() {
   view -= TRELLIS_WIDTH;
   if (view < 0) {
@@ -889,7 +900,8 @@ void decrease_arp_released() {
 }
 
 void increase_view_page_pressed() {
-  trellis.setPixelColor(INCREASE_VIEW_PAGE_BUTTON, 0, pressed);
+  int i = min(3, view_page() + 1);
+  trellis.setPixelColor(INCREASE_VIEW_PAGE_BUTTON, 0, view_pages[i]);
   trellis.show();
 }
 
@@ -901,7 +913,8 @@ void increase_view_page_released() {
 }
 
 void decrease_view_page_pressed() {
-  trellis.setPixelColor(DECREASE_VIEW_PAGE_BUTTON, 0, pressed);
+  int i = max(0, view_page() - 1);
+  trellis.setPixelColor(DECREASE_VIEW_PAGE_BUTTON, 0, view_pages[i]);
   trellis.show();
 }
 
