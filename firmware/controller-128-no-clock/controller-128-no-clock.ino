@@ -1,7 +1,7 @@
 /*
 
     mplsartindustry/controller-128
-    Copyright (c) 2020-2024 held jointly by the individual authors.
+    Copyright (c) 2020-2025 held jointly by the individual authors.
 
     This file is part of mplsartindustry/controller-128.
 
@@ -342,6 +342,13 @@ struct Track {
     }
   }
 
+  // set all bits up to length to true
+  void fill() {
+    for (int i = 0; i < length; i++) {
+      set(i, true);
+    }
+  }
+
   // check index i is within start and start + length
   boolean check(int i) {
     return (i >= start) && (i < (start + length));
@@ -485,6 +492,60 @@ struct Track {
       }
     }
   }
+
+  void euclidian(int pulses) {
+    if (pulses == 0) {
+      clear();
+    }
+    else if (pulses == 1) {
+      clear();
+      set(0, true);
+    }
+    else if (pulses >= length) {
+      fill();
+    }
+    else {
+      int pauses = length - pulses;
+      if (pauses >= pulses) {
+        int per = pauses / pulses;
+        int rem = pauses % pulses;
+
+        int x = 0;
+        for (int i = 0; i < pulses; i++) {
+          set(x, true);
+          x++;
+          for (int j = 0; j < per; j++) {
+            set(x, false);
+            x++;
+          }
+          if (i < rem) {
+            set(x, false);
+            x++;
+          }
+        }
+      }
+      else {
+        int per = (pulses - pauses) / pauses;
+        int rem = (pulses - pauses) % pauses;
+
+        int x = 0;
+        for (int i = 0; i < pulses; i++) {
+          set(x, true);
+          x++;
+          set(x, false);
+          x++;
+          for (int j = 0; j < per; j++) {
+            set(x, true);
+            x++;
+          }
+          if (i < rem) {
+            set(x, true);
+            x++;
+          }
+        }
+      }
+    }
+  }
 };
 
 Track tracks[7];
@@ -520,7 +581,10 @@ Track tracks[7];
 #define DECREASE_FOCUS_BUTTON 10
 #define INCREASE_FOCUS_BUTTON 11
 
-#define RANDOMIZE_BUTTON 12
+// unused
+#define RANDOMIZE_BUTTON -12
+
+#define EUCLIDIAN_BUTTON 12
 
 #define COPY_BUTTON 13
 
@@ -946,6 +1010,30 @@ void randomize_released() {
   }
 }
 
+int euclidian_steps = 1;
+
+void euclidian_pressed() {
+  trellis.setPixelColor(EUCLIDIAN_BUTTON, 0, pressed);
+  trellis.show();
+}
+
+void euclidian_released() {
+  trellis.setPixelColor(EUCLIDIAN_BUTTON, 0, off);
+  trellis.show();
+
+  if (focus_mode) {
+    Track* t = &tracks[focus_index];
+    t->euclidian(t->length % euclidian_steps);
+  }
+  else {
+    for (int i = 0; i < 7; i++) {
+      Track* t = &tracks[i];
+      t->euclidian(t->length % euclidian_steps);
+    }
+  }
+  euclidian_steps++;
+}
+
 void copy_pressed() {
   trellis.setPixelColor(COPY_BUTTON, 0, pressed);
   trellis.show();
@@ -1024,6 +1112,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_pressed(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_pressed(); break;
         case RANDOMIZE_BUTTON: randomize_pressed(); break;
+        case EUCLIDIAN_BUTTON: euclidian_pressed(); break;
         case COPY_BUTTON: copy_pressed(); break;
         default: break;
       }
@@ -1056,6 +1145,7 @@ TrellisCallback buttonCallback(keyEvent evt) {
         case INCREASE_VIEW_PAGE_BUTTON: increase_view_page_released(); break;
         case DECREASE_VIEW_PAGE_BUTTON: decrease_view_page_released(); break;
         case RANDOMIZE_BUTTON: randomize_released(); break;
+        case EUCLIDIAN_BUTTON: euclidian_released(); break;
         case COPY_BUTTON: copy_released(); break;
         default: break;
       }
