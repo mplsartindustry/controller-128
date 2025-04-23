@@ -1023,12 +1023,16 @@ void euclidian_released() {
 
   if (focus_mode) {
     Track* t = &tracks[focus_index];
-    t->euclidian(t->length % euclidian_steps);
+    if (t->length > 0) {
+      t->euclidian(euclidian_steps % t->length);
+    }
   }
   else {
     for (int i = 0; i < 7; i++) {
       Track* t = &tracks[i];
-      t->euclidian(t->length % euclidian_steps);
+      if (t->length > 0) {
+        t->euclidian(euclidian_steps % t->length);
+      }
     }
   }
   euclidian_steps++;
