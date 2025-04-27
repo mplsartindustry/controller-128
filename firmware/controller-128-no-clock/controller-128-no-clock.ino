@@ -529,7 +529,7 @@ struct Track {
         int rem = (pulses - pauses) % pauses;
 
         int x = 0;
-        for (int i = 0; i < pulses; i++) {
+        for (int i = 0; i < pauses; i++) {
           set(x, true);
           x++;
           set(x, false);
