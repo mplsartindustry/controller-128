@@ -42,7 +42,7 @@
 #define SHIFT_CLK 20
 #define SHIFT_LATCH 19
 #define COMMON_INTERRUPT 8    // INT3
-#define CLOCK_INTERRUPT 7
+#define CLOCK_INTERRUPT 7     // INT2
 #define RESET 9
 
 namespace Hardware {
@@ -110,16 +110,22 @@ namespace Hardware {
   volatile uint8_t interruptWriteIdx = 0;
   uint8_t interruptReadIdx = 0;
 
+  volatile uint8_t hwClockBuffer[INTERRUPT_BUF_SIZE]; // Stores snapshots of PIND
+  volatile uint8_t hwClockWriteIdx = 0;
+  uint8_t hwClockReadIdx = 0;
+
   EncoderState leftEncoder(Encoder::LEFT, L_ENCODER_A, L_ENCODER_B, L_ENCODER_S);
   EncoderState rightEncoder(Encoder::RIGHT, R_ENCODER_A, R_ENCODER_B, R_ENCODER_S);
 
-  bool softwareClockEnabled;
+  volatile bool softwareClockEnabled;
   uint64_t prevTime;
   double unprocessedTime;
   double secondsPerPhase;
   bool clockEdge;
   uint16_t bpm;
   uint64_t prevRead;
+  bool prevReset;
+  bool prevHwClock;
   
   inline void initShiftRegister() {
     pinMode(SHIFT_DATA,  OUTPUT);
@@ -159,11 +165,11 @@ namespace Hardware {
 
   #define INTERRUPT(pin, fn) attachInterrupt(digitalPinToInterrupt(pin), fn, CHANGE)
   inline void initInterrupts() {
-    pinMode(RESET, OUTPUT);
-    digitalWrite(RESET, LOW);
-    
+    pinMode(RESET, INPUT);    
     pinMode(COMMON_INTERRUPT, INPUT);
+    pinMode(CLOCK_INTERRUPT, INPUT);
     INTERRUPT(COMMON_INTERRUPT, handleInterrupt);
+    INTERRUPT(CLOCK_INTERRUPT, handleClockInterrupt);
   }
 
   inline void initClock() {
@@ -172,6 +178,9 @@ namespace Hardware {
 
     softwareClockEnabled = true;
     setClockBPM(DEFAULT_BPM);
+
+    prevHwClock = false;
+    prevReset = false;
   }
 
   inline void initSerial() {
@@ -211,12 +220,21 @@ namespace Hardware {
 
   void handleInterrupt() {
     // Access port registers directly for fastest possible speed
-    uint8_t state = (PINB & 0b01110000) | (PINF & 0b10000000);
+    uint8_t state = (PINB & 0b01110000) | ((PINC & 0b01000000) != 0) | (PINF & 0b10000000);
 
     // Write to circular buffer
     interruptBuffer[interruptWriteIdx++] = state;
     if (interruptWriteIdx >= INTERRUPT_BUF_SIZE)
       interruptWriteIdx -= INTERRUPT_BUF_SIZE;
+  }
+
+  void handleClockInterrupt() {
+    if (softwareClockEnabled)
+      return;
+
+    hwClockBuffer[hwClockWriteIdx++] = PIND;
+    if (hwClockWriteIdx >= INTERRUPT_BUF_SIZE)
+      hwClockWriteIdx -= INTERRUPT_BUF_SIZE;
   }
 
   uint16_t getClockBPM() {
@@ -253,15 +271,23 @@ namespace Hardware {
       if (interruptReadIdx >= INTERRUPT_BUF_SIZE)
         interruptReadIdx -= INTERRUPT_BUF_SIZE;
 
+      Serial.print("inter ");
+      Serial.println(state, BIN);
+
       leftEncoder.handlePins((state & 0b00100000) != 0, (state & 0b00010000) != 0);
       rightEncoder.handlePins((state & 0b10000000) != 0, (state & 0b01000000) != 0);
+
+      bool reset = state & 1;
+      if (reset && !prevReset)
+        Controller::onReset();
+      prevReset = reset;
     }
     
     leftEncoder.callHandlers();
     rightEncoder.callHandlers();
 
-    // Software clock
     if (softwareClockEnabled) {
+      // Software clock
       uint64_t time = millis();
       uint64_t passedTime = time - prevTime;
       prevTime = time;
@@ -275,14 +301,33 @@ namespace Hardware {
         clockEdge = !clockEdge;
         unprocessedTime -= secondsPerPhase;
       }
+
+      // Ignore hardware clock
+      hwClockReadIdx = hwClockWriteIdx;
     } else {
+      // No software clock
       if (!clockEdge) {
         Controller::onClockFalling();
         clockEdge = true;
       }
-
       unprocessedTime = 0;
       prevTime = millis();
+
+      // Handle hardware clocks
+      while (hwClockReadIdx != hwClockWriteIdx) {
+        uint8_t pindAtEdge = hwClockBuffer[hwClockReadIdx++];
+        if (hwClockReadIdx >= INTERRUPT_BUF_SIZE)
+          hwClockReadIdx -= INTERRUPT_BUF_SIZE;
+
+        bool state = (pindAtEdge & (1 << 2)) != 0;
+
+        if (state && !prevHwClock)
+          Controller::onClockRising();
+        if (!state && prevHwClock)
+          Controller::onClockFalling();
+
+        prevHwClock = state;
+      }
     }
   }
 
