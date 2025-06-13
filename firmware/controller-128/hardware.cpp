@@ -271,9 +271,6 @@ namespace Hardware {
       if (interruptReadIdx >= INTERRUPT_BUF_SIZE)
         interruptReadIdx -= INTERRUPT_BUF_SIZE;
 
-      Serial.print("inter ");
-      Serial.println(state, BIN);
-
       leftEncoder.handlePins((state & 0b00100000) != 0, (state & 0b00010000) != 0);
       rightEncoder.handlePins((state & 0b10000000) != 0, (state & 0b01000000) != 0);
 
