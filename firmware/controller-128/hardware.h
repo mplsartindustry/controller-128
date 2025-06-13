@@ -82,6 +82,7 @@ namespace Hardware {
   // Interrupt handlers
   TrellisCallback buttonCallback(keyEvent event);
   void handleInterrupt();
+  void handleClockInterrupt();
 
   bool isSoftwareClockEnabled();
   void setSoftwareClockEnabled(bool enabled);

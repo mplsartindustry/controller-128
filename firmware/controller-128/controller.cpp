@@ -62,9 +62,28 @@ namespace Controller {
         blankColor(blank), activeColor(active) {
       memset(state, 0, sizeof(state));
     }
+
+    void copyFrom(Pattern *from) {
+      memcpy(state, from->state, MAX_PATTERN_LEN);
+      length = from->length;
+      scroll = from->scroll;
+    }
+
+    void rotateLeft() {
+      uint8_t first = state[0];
+      memmove(&state[0], &state[1], length - 1);
+      state[length - 1] = first;
+    }
+
+    void rotateRight() {
+      uint8_t last = state[length - 1];
+      memmove(&state[1], &state[0], length - 1);
+      state[0] = last;
+    }
   };
 
   struct SongPattern {
+    // High bits first, then low
     uint8_t state[MAX_PATTERN_LEN >> 1];
     uint8_t length = DEFAULT_PATTERN_LEN;
 
@@ -72,6 +91,36 @@ namespace Controller {
 
     SongPattern() {
       memset(state, 0, sizeof(state));
+    }
+
+    uint8_t get(uint8_t index) {
+      if (index & 1)
+        return state[index / 2] & 0x0F;
+      else
+        return state[index / 2] >> 4;
+    }
+
+    void set(uint8_t index, uint8_t val) {
+      if (index & 1)
+        state[index / 2] = (state[index / 2] & 0xF0) | val;
+      else
+        state[index / 2] = (state[index / 2] & 0x0F) | (val << 4);
+    }
+
+    void rotateLeft() {
+      uint8_t first = get(0);
+      for (uint8_t i = 0; i < length - 1; i++) {
+        set(i, get(i + 1));
+      }
+      set(length - 1, first);
+    }
+
+    void rotateRight() {
+      uint8_t last = get(length - 1);
+      for (uint8_t i = length - 1; i > 0; i--) {
+        set(i, get(i - 1));
+      }
+      set(0, last);
     }
   };
 
@@ -100,6 +149,8 @@ namespace Controller {
   uint8_t currentOutputs = 0x00;
   uint8_t gateMask = 0x00; // If bit is set, the channel is a gate, otherwise it's a trigger
 
+  bool clockOn = false;
+
   // --- VIEW ---
   #define MAX_COLUMN_UPDATES_PER_LOOP 2
 
@@ -127,6 +178,8 @@ namespace Controller {
   bool rightEncoderPressed = false;
   uint64_t popupTime = 0; // 0 = no popup
   bool settingsMenuOpen = false;
+  uint8_t heldPatterns = 0;
+  bool songHeld = false;
 
   #define PIXEL_TO_PATTERN(x) ((x) + getCurrentScroll())
   #define PATTERN_TO_PIXEL(x) ((x) - getCurrentScroll())
@@ -466,18 +519,38 @@ namespace Controller {
     tapCount = -1;
   }
 
+  inline void switchToPatternButton(int index) {
+    heldPatterns |= (1 << index);
+
+    uint8_t heldIndex;
+    for (heldIndex = 0; heldIndex < PATTERN_COUNT; heldIndex++) {
+      if (heldIndex == index)
+        continue;
+      if (heldPatterns & (1 << heldIndex))
+        break;
+    }
+
+    if (heldIndex < PATTERN_COUNT) {
+      // Copy from held pattern to new pattern
+      Pattern *from = &patterns[heldIndex];
+      patterns[index].copyFrom(from);
+    }
+
+    switchToPattern(index);
+  }
+
   inline void controlRow(uint8_t x) {
     switch (x) {
       case CLOCK_X:        clockPress(); break;
       case CLOCK_MODE_X:   beginTapTempo(); break;
       case SETTINGS_X:     settingsMenuOpen = true; dirtyColumns = 0xFFFF; break;
       case CLEAR_X:        clearCurrent(); break;
-      case SONG_X:         switchToSong(); break;
+      case SONG_X:         switchToSong(); songHeld = true; break;
       case DIRECTION_X:    toggleClockDirection(); break;
       case PLAY_SONG_X:    if (playingPattern) stopPlaying(); else playSong(); break;
       case PLAY_PATTERN_X: if (playingPattern) stopPlaying(); else playPattern(); break;
       case RESET_X:        onReset(); break;
-      default:             switchToPattern(x - PATTERNS_START_X); break;
+      default:             switchToPatternButton(x - PATTERNS_START_X); break;
     }
     Hardware::updateTrellis();
   }
@@ -519,8 +592,17 @@ namespace Controller {
         onClockFalling();
       if (x == CLOCK_MODE_X)
         endTapTempo();
+      if (x == SONG_X)
+        songHeld = false;
     }
     Hardware::updateTrellis();
+
+    int8_t pattern = (int8_t) x - PATTERNS_START_X;
+    if (pattern >= 0 && pattern < PATTERN_COUNT) {
+      heldPatterns &= ~(1 << pattern);
+      // Serial.print("Held ");
+      // Serial.println(heldPatterns, BIN);
+    }
   }
 
 
@@ -532,6 +614,15 @@ namespace Controller {
     }
   }
 
+
+  void writeOutputs() {
+    if (clockOn) {
+      currentOutputs = playingPattern->state[cursorX];
+      Hardware::outputTriggers(currentOutputs | 1); // Always output trigger on output 1 for clock out
+    } else {
+      Hardware::outputTriggers(currentOutputs & gateMask);
+    }
+  }
 
   void onClockRising() {
     Hardware::setPixel(0, 0, direction < 0 ? CLOCK_BACKWARD : CLOCK_FORWARD);
@@ -573,12 +664,14 @@ namespace Controller {
     if (viewedPattern == playingPattern)
       redrawColumn(cursorX);
 
-    currentOutputs = playingPattern->state[cursorX];
-    Hardware::outputTriggers(currentOutputs | 1); // Always output trigger on output 1 for clock out
+    clockOn = true;
+    writeOutputs();
   }
 
   void onClockFalling() {
-    Hardware::outputTriggers(currentOutputs & gateMask);
+    clockOn = false;
+    writeOutputs();
+
     Hardware::setPixel(0, 0, CLOCK_OFF);
     Hardware::updateTrellis();
   }
@@ -606,6 +699,8 @@ namespace Controller {
       if (playingPattern == viewedPattern)
         redrawColumn(cursorX);
     }
+
+    writeOutputs();
   }
 
   void lengthenPattern() {
@@ -721,7 +816,29 @@ namespace Controller {
             shortenPattern();
             movement++;
           }
-        }        
+        }
+      } else if (viewedPattern && (heldPatterns & (1 << viewedPatternIdx))) {
+        while (movement != 0) {
+          if (movement > 0) {
+            viewedPattern->rotateRight();
+            movement--;
+          } else {
+            viewedPattern->rotateLeft();
+            movement++;
+          }
+        }
+        dirtyColumns = 0xFFFF;
+      } else if (!viewedPattern && songHeld) {
+        while (movement != 0) {
+          if (movement > 0) {
+            songPattern.rotateRight();
+            movement--;
+          } else {
+            songPattern.rotateLeft();
+            movement++;
+          }
+          dirtyColumns = 0xFFFF;
+        }
       } else {
         doScroll(-movement);
       }
